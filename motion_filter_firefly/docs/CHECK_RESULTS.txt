@@ -1,0 +1,59 @@
+Linux x86_64 development checks, 2026-10-15
+
+[CHECK] config
+PASS: config/camera schema, 33 invalid cases rejected, URL credentials redacted
+
+[CHECK] affinity
+PASS: CPU list validation and main-only affinity; existing worker mask unchanged
+
+[CHECK] recovery
+PASS healthy attempts=1 exit=0
+PASS transient attempts=2 exit=0
+PASS startup_hang attempts=2 exit=0
+PASS frame_hang attempts=2 exit=0
+PASS shutdown_hang attempts=2 exit=0
+PASS crash attempts=2 exit=0
+PASS fatal attempts=1 exit=1
+PASS cancel_hang attempts=1 exit=1
+PASS cancel_backoff attempts=1 exit=0
+PASS fatal_cleanup_hang attempts=1 exit=1
+PASS: recovery, watchdog deadlines, fatal errors, cancellation, no overlapping/orphan workers
+
+[CHECK] recorder
+[REC] START event=1 file=<temporary>/output/good/clips/event_000001.mp4 preroll_packets=40
+[REC] STOP event=1
+[REC] READY file=<temporary>/output/good/clips/event_000001.mp4
+[REC] failed to start writer pipeline
+PASS: 80 packets, compressed pictures/PTS/DTS preserved; completed rename and writer-error propagation
+PASS: generated clip decoded completely
+
+[CHECK] sparse_l3
+PASS: 1300 frames, all FrameResult fields/masks/event signals equal; ROI=10.2325% empty_fast=768
+
+[CHECK] algorithm_config
+PASS: configured morphology/history and 180-frame nondefault neighborhood ROI parity
+
+[CHECK] l2_capture
+PASS: lossless masks, padded/odd strides, bit-pack and RLE, float density, 64-bit PTS, CRC damage and missing-footer rejection
+
+[CHECK] live_budget
+PASS: live rate budget and latency statistics
+
+[CHECK] pts_diagnostics
+PASS: PTS diagnostics; raw reasons, 1000-frame cascade, window merge, branch isolation and unchanged legacy timestamps
+
+[CHECK] stage_timing
+PASS: independent wall/thread CPU intervals and per-frame reset
+
+[CHECK] log_line
+PASS: 8000 concurrent application log records intact
+
+[CHECK] launcher
+PASS: launcher replicas, literal .env values, credential-safe plan, YAML cadence, bounded run and child cleanup
+PASS: signal cancellation finalizes evidence; overlapping launcher rejected
+PASS: missing camera URL, ambiguous replication and fatal child failure rejected
+
+PASS: native C++ syntax with genuine OpenCV/GStreamer/RGA headers; -Werror
+
+PASS: collector YAML sample count, disabled sampling, byte cap, first/last default and worker-PID RSS match
+PASS: 67 required YAML keys wired and documented; Bash syntax; frozen algorithm reference byte-identical

@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+build/
+build_*/
+output/
+logs/
+evidence/
+*.tar.gz

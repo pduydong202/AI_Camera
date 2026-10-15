@@ -1,0 +1,91 @@
+%YAML:1.0
+# Duong dan tuong doi tinh tu thu muc du an. 0/1 cho cac co bat/tat.
+output_root: "output"
+
+# Kich thuoc phan tich, lay mau va CPU. Giu nguyen gia tri da kiem chung.
+analysis_max_width: 854
+analysis_max_height: 480
+analysis_allow_upscale: 0
+analysis_target_fps: 20.0
+analysis_sampling_enabled: 1
+analysis_rate_burst_ms: 200
+analysis_sparse_l3_enabled: 1
+opencv_threads: 1
+main_cpu_list: "4-7"
+fallback_fps: 30.0
+startup_warmup_sec: 2.0
+
+# L1/L2/L3: khai bao ro cac gia tri truoc day la hang so/default.
+# Giu 3x3 va 8 bit Otsu nhu thuat toan da doi chieu; khong tu dong nang 16 bit.
+l1_history_frames: 500
+l1_var_threshold: 16.0
+l1_learning_rate: -1.0  # -1: OpenCV tu dong; [0,1]: co dinh
+l1_open_kernel_size: 3
+l2_history_frames: 0  # 0: theo l1_history_frames (mac dinh 500 frame)
+l2_repeat_neighborhood_size: 3
+l3_location_neighborhood_size: 3
+component_connectivity: 8
+
+# Dieu kien mo/dong su kien va ti le TAWL. Khong doi logic L1/L2/L3.
+event_pre_sec: 2.0
+event_post_sec: 2.0
+event_min_valid_ratio: 0.005
+tawl_temporal_fps_ratio: 0.20
+tawl_width_frame_ratio: 0.05
+record_safety_sec: 1.0
+
+# Chan doan: de 0 trong bai tai nhieu camera.
+validation_enabled: 0
+validation_ring_sec: 4.0
+validation_queue_max_messages: 512
+validation_fourcc: "mp4v"
+frame_stats_enabled: 0
+stats_interval_sec: 1.0
+perf_stats_enabled: 1
+l2_capture_enabled: 0
+
+# Van chuyen RTSP va cac bo dem co gioi han.
+decoder_element: "mppvideodec"
+rtsp_latency_ms: 200
+rtsp_buffer_mode: 3
+rtsp_drop_on_latency: 0
+rtsp_use_tcp: 1
+analysis_drop_old_frames: 1
+analysis_max_buffers: 8
+encoded_max_buffers: 512
+# Cac queue truoc decoder/encoded appsink: gia tri GStreamer mac dinh cu.
+# Queue chan khi cham, khong huy goi nen; dung khi cham mot trong cac gioi han.
+gst_queue_max_buffers: 200
+gst_queue_max_bytes: 10485760
+gst_queue_max_time_ms: 1000
+source_poll_timeout_ms: 200
+offline_sampling_tolerance_ms: 1.0
+record_enabled: 1
+record_ring_sec: 4.0
+writer_queue_max_messages: 1024
+writer_appsrc_max_bytes: 200000
+writer_eos_timeout_sec: 10.0
+
+# Watchdog va ket noi lai. Don vi giay.
+rtsp_reconnect_enabled: 1
+rtsp_startup_timeout_sec: 20.0
+rtsp_stall_timeout_sec: 15.0
+rtsp_shutdown_timeout_sec: 20.0
+rtsp_retry_initial_sec: 1.0
+rtsp_retry_max_sec: 30.0
+rtsp_retry_reset_sec: 30.0
+rtsp_watchdog_poll_ms: 100
+rtsp_retry_multiplier: 2.0
+
+# Tan suat thong bao/thu so do va gioi han clip mau trong goi evidence.
+# 0 clip hoac 0 MiB: khong sao chep clip mau; video goc van nam trong output.
+status_interval_sec: 10
+system_sample_interval_sec: 10
+affinity_snapshot_after_sec: 15
+launcher_poll_ms: 1000
+evidence_sample_clip_count: 2
+evidence_sample_max_mib: 20
+
+# URL that nam trong .env. --replicas chi dung khi danh sach co 1 camera.
+cameras:
+  - { id: cam01, url_env: CAM01_RTSP, codec: h264, gop_hint_sec: 0.0 }
