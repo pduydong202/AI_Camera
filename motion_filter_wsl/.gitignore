@@ -1,0 +1,30 @@
+# Build
+build/
+build_*/
+CMakeFiles/
+CMakeCache.txt
+
+# Runtime output
+output/
+logs/
+evidence/
+masks/
+masks_full/
+
+# Local datasets
+video/
+videos/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Temporary files
+*.log
+*.tar.gz
+*.tmp
+
+# Editor
+.vscode/
+.idea/

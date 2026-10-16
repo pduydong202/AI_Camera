@@ -1,0 +1,36 @@
+%YAML:1.0
+output_root: "output"
+analysis_max_width: 1280
+analysis_max_height: 720
+analysis_allow_upscale: 0
+analysis_target_fps: 20.0
+fallback_fps: 30.0
+startup_warmup_sec: 2.0
+event_pre_sec: 2.0
+event_post_sec: 2.0
+
+# Single explicit event threshold: unexplained valid foreground / analysis frame area.
+event_min_valid_ratio: 0.005
+tawl_temporal_fps_ratio: 0.20
+tawl_width_frame_ratio: 0.05
+offline_record_enabled: 1
+offline_fourcc: "mp4v"
+offline_writer_queue_max_messages: 512
+record_safety_sec: 1.0
+full_mask_enabled: 1
+full_mask_fourcc: "mp4v"
+validation_enabled: 1
+validation_ring_sec: 4.0
+validation_queue_max_messages: 512
+validation_fourcc: "mp4v"
+frame_stats_enabled: 1
+stats_interval_sec: 1.0
+decoder_element: "mppvideodec"
+rtsp_latency_ms: 200
+rtsp_use_tcp: 1
+analysis_drop_old_frames: 1
+analysis_max_buffers: 2
+encoded_max_buffers: 512
+record_enabled: 1
+record_ring_sec: 4.0
+writer_queue_max_messages: 1024

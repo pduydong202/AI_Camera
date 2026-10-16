@@ -1,0 +1,7 @@
+Static audit:
+- VALID mask is debug-only and is generated from the same connected components already counted by validPixels.
+- Event decision remains: warmupDone && validRatio >= eventMinValidRatio.
+- No L1/L2/L3/event logic was otherwise changed.
+- Full masks: L1, L2, L3, VALID.
+- Event masks: L1, L2, L3, VALID.
+- Full build was not available in the packaging environment because OpenCV development CMake files are not installed there. Build on the target WSL environment.
