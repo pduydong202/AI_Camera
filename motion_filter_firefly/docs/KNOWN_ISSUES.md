@@ -24,4 +24,7 @@ Chớp sáng, đổi toàn cảnh lúc lặp video và cây rung có thể tạo
 
 H.265 có đường xử lý trong mã nhưng chứng cứ native được tổng hợp ở đây dùng H.264. Pre-roll phụ thuộc keyframe có sẵn; warmup/reconnect có thể chưa đủ lịch sử. Không encode lại clip gốc.
 
-Ứng dụng chưa tự upload video, chưa tự giới hạn dung lượng/xóa clip cũ. Video mask là chẩn đoán phụ; lỗi mở writer mask được ghi log, không có cùng hợp đồng công bố clip hoàn chỉnh như recorder nén. Gói chứng cứ chỉ chứa một số clip mẫu và kết quả probe/decode có sẵn, không thay việc rà toàn bộ video quan trọng.
+Đường HTTP mới gửi trực tiếp video tới Optiplex, giới hạn ring/queue theo byte;
+không có replay từ đĩa Firefly khi mạng mất lâu. Chưa có retention/xóa clip đã
+nhận tự động. Video mask là chẩn đoán phụ của file mode; HTTP mode yêu cầu tắt
+validation/L2 capture. Xem [NETWORK_DELIVERY.md](NETWORK_DELIVERY.md).

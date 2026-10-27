@@ -48,6 +48,14 @@ base_output=$("$binary" --output-root "$config_file")
 runtime_settings=$("$binary" --runtime-settings "$config_file")
 declare -A settings=()
 while IFS=$'\t' read -r key value; do settings[$key]=$value; done <<< "$runtime_settings"
+if [[ ${settings[record_enabled]:-0} == 1 && ${settings[record_destination]:-file} == http ]]; then
+    for name in "${settings[record_server_url_env]}" "${settings[record_token_env]}"; do
+        [[ $name =~ ^[A-Za-z_][A-Za-z0-9_]*$ && -n ${env_values[$name]:-} ]] || {
+            printf 'Missing video server setting in .env (check URL/token keys).\n' >&2; exit 1;
+        }
+        export "$name=${env_values[$name]}"
+    done
+fi
 poll_seconds=$(awk -v ms="${settings[launcher_poll_ms]}" 'BEGIN {printf "%.3f",ms/1000}')
 mapfile -t inventory_rows <<< "$inventory"
 if ((replicas>0 && ${#inventory_rows[@]}!=1)); then printf '%s\n' '--replicas requires exactly one configured camera.' >&2; exit 1; fi

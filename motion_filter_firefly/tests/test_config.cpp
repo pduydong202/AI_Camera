@@ -84,6 +84,16 @@ int main(int argc, char** argv) {
             "gst_queue_max_time_ms", "0"));
         reject(replace(text, "writer_appsrc_max_bytes", "0"));
         reject(replace(text, "writer_eos_timeout_sec", "20.0"));
+        reject(replace(text, "record_destination", "\"ftp\""));
+        reject(replace(text, "record_device_id", "\"../bad\""));
+        reject(replace(text, "record_token_env", "\"BAD-NAME\""));
+        reject(replace(text, "record_ring_max_mib", "0"));
+        reject(replace(text, "writer_queue_max_mib", "1025"));
+        reject(replace(text, "http_buffer_max_mib", "0"));
+        reject(replace(text, "http_fragment_ms", "0"));
+        reject(replace(text, "http_timeout_sec", "1.0"));
+        reject(replace(text, "http_timeout_sec", "9.0"));
+        reject(replace(text, "validation_enabled", "1"));
         reject(replace(text, "status_interval_sec", "0"));
         reject(replace(text, "system_sample_interval_sec", "0"));
         reject(replace(text, "affinity_snapshot_after_sec", "-1"));

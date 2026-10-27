@@ -2,9 +2,11 @@
 #include "log_line.hpp"
 
 #include <gst/app/gstappsrc.h>
+#include <gst/app/gstappsink.h>
 #include <gst/gst.h>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
@@ -15,6 +17,11 @@
 namespace fs = std::filesystem;
 
 namespace {
+
+std::int64_t writerNowNs() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 
 std::string quoteGst(const std::string& s) {
     std::string out = "\"";
@@ -51,7 +58,8 @@ AsyncClipWriter::~AsyncClipWriter() {
 void AsyncClipWriter::start() {
     if (started_)
         return;
-    fs::create_directories(fs::path(cfg_.outputRoot) / "clips");
+    if (cfg_.recordDestination == "file")
+        fs::create_directories(fs::path(cfg_.outputRoot) / "clips");
     thread_ = std::thread(&AsyncClipWriter::run, this);
     started_ = true;
 }
@@ -59,6 +67,9 @@ void AsyncClipWriter::start() {
 void AsyncClipWriter::close() {
     if (!started_)
         return;
+    if (cfg_.recordDestination == "http")
+        shutdownDeadlineNs_ = writerNowNs() + static_cast<std::int64_t>(
+            std::max(1.0, cfg_.rtspShutdownTimeoutSec - 2.0) * 1e9);
     queue_.close();
     if (thread_.joinable())
         thread_.join();
@@ -72,7 +83,8 @@ bool AsyncClipWriter::beginClip(std::uint64_t eventId, const std::string& codec,
     m.eventId = eventId;
     m.codec = codec;
     m.preRoll = preRoll;
-    return queue_.push(std::move(m));
+    for (const auto& p : preRoll) m.bytes += p->data.size();
+    return enqueue(std::move(m));
 }
 
 bool AsyncClipWriter::pushPacket(std::uint64_t eventId,
@@ -81,14 +93,48 @@ bool AsyncClipWriter::pushPacket(std::uint64_t eventId,
     m.type = MessageType::Packet;
     m.eventId = eventId;
     m.packet = packet;
-    return queue_.push(std::move(m));
+    m.bytes = packet ? packet->data.size() : 0;
+    return enqueue(std::move(m));
 }
 
 bool AsyncClipWriter::endClip(std::uint64_t eventId) {
     Message m;
     m.type = MessageType::Stop;
     m.eventId = eventId;
-    return queue_.push(std::move(m));
+    return enqueue(std::move(m));
+}
+
+void AsyncClipWriter::dropEvent(std::uint64_t eventId, const char* reason) {
+    // A missing packet/Stop invalidates the queued prefix too. Discard pending
+    // events through this ID to recover promptly instead of replaying stale data.
+    auto previous = abortedThrough_.load();
+    while (previous < eventId) {
+        if (abortedThrough_.compare_exchange_weak(previous, eventId)) {
+            ++lostEvents_;
+            LogLine(std::cerr) << "[SEND FAILED] event=" << eventId << " reason=" << reason
+                               << " discard_pending_through=" << eventId << " replay_available=0\n";
+            break;
+        }
+    }
+}
+
+bool AsyncClipWriter::enqueue(Message m) {
+    if (cfg_.recordDestination != "http") return queue_.push(std::move(m));
+    if (m.eventId <= abortedThrough_.load()) return false;
+    const auto limit = static_cast<std::size_t>(cfg_.writerQueueMaxMiB) * 1024U * 1024U;
+    auto current = queuedBytes_.load();
+    do {
+        if (m.bytes > limit || current > limit - m.bytes) {
+            dropEvent(m.eventId, "packet byte budget exceeded");
+            return false;
+        }
+    } while (!queuedBytes_.compare_exchange_weak(current, current + m.bytes));
+    const auto bytes = m.bytes;
+    const auto event = m.eventId;
+    if (queue_.tryPush(std::move(m))) return true;
+    queuedBytes_.fetch_sub(bytes);
+    dropEvent(event, "packet queue full or closed");
+    return false;
 }
 
 std::string AsyncClipWriter::errorMessage() const {
@@ -110,8 +156,25 @@ void AsyncClipWriter::run() {
     try {
         Message m;
         while (queue_.pop(m)) {
+            const bool http = cfg_.recordDestination == "http";
+            if (http) {
+                queuedBytes_.fetch_sub(m.bytes);
+                if (m.eventId <= abortedThrough_.load()) {
+                    if (pipeline_ && activeEventId_ <= abortedThrough_.load()) {
+                        httpSessionFailed_ = true;
+                        closeSession();
+                    }
+                    continue;
+                }
+            }
             switch (m.type) {
             case MessageType::Start:
+                if (http && shutdownDeadlineNs_ != 0 &&
+                    writerNowNs() + static_cast<std::int64_t>(
+                        (cfg_.writerEosTimeoutSec + cfg_.httpTimeoutSec + 1) * 1e9) >= shutdownDeadlineNs_) {
+                    dropEvent(m.eventId, "shutdown budget exhausted; backlog discarded");
+                    break;
+                }
                 if (pipeline_ != nullptr)
                     closeSession();
                 if (hasError())
@@ -119,18 +182,29 @@ void AsyncClipWriter::run() {
                 if (openSession(m)) {
                     for (const auto& p : m.preRoll) {
                         if (!writePacket(p)) {
-                            fail("Cannot write pre-roll packet");
+                            if (http) {
+                                dropEvent(m.eventId, "cannot send pre-roll packet");
+                                httpSessionFailed_ = true;
+                                closeSession();
+                            } else fail("Cannot write pre-roll packet");
                             break;
                         }
                     }
-                } else if (!m.preRoll.empty())
-                    fail("Cannot open encoded clip writer");
+                } else if (!m.preRoll.empty()) {
+                    if (http) dropEvent(m.eventId, "cannot open HTTP event writer");
+                    else fail("Cannot open encoded clip writer");
+                }
                 break;
 
             case MessageType::Packet:
                 if (pipeline_ != nullptr && m.eventId == activeEventId_) {
-                    if (!writePacket(m.packet))
-                        fail("Cannot write encoded packet");
+                    if (!writePacket(m.packet)) {
+                        if (http) {
+                            dropEvent(m.eventId, "network/muxer failed or buffer full");
+                            httpSessionFailed_ = true;
+                            closeSession();
+                        } else fail("Cannot write encoded packet");
+                    }
                 }
                 break;
 
@@ -166,16 +240,20 @@ bool AsyncClipWriter::openSession(const Message& msg) {
     const std::string filePath = eventFilename(cfg_.outputRoot, msg.eventId);
     const std::string parser = (msg.codec == "h265") ? "h265parse" : "h264parse";
 
+    const bool http = cfg_.recordDestination == "http";
     const std::string pipelineText =
-        "appsrc name=src is-live=false format=time block=true max-bytes=" +
+        "appsrc name=src is-live=false format=time block=" + std::string(http ? "false" : "true") +
+        " max-bytes=" +
         std::to_string(cfg_.writerAppsrcMaxBytes) +
         " "
         "! " +
         parser +
-        " "
-        "! mp4mux faststart=true "
-        "! filesink location=" +
-        quoteGst(filePath + ".part") + " sync=false";
+        " " +
+        (http ? "! mp4mux fragment-duration=" + std::to_string(cfg_.httpFragmentMs) +
+                    " streamable=true ! appsink name=upload_sink emit-signals=true sync=false "
+                    "max-buffers=1 drop=false wait-on-eos=false"
+              : "! mp4mux faststart=true ! filesink location=" + quoteGst(filePath + ".part") +
+                    " sync=false");
 
     GError* error = nullptr;
     GstElement* pipeline = gst_parse_launch(pipelineText.c_str(), &error);
@@ -206,6 +284,36 @@ bool AsyncClipWriter::openSession(const Message& msg) {
     gst_caps_unref(caps);
 
     GstBus* bus = gst_element_get_bus(pipeline);
+    if (http) {
+        const auto url = cfg_.recordServerUrl + "/v1/events/" + cfg_.recordDeviceId + "/" +
+                         cfg_.recordCameraId + "/" + cfg_.recordSessionId + "/" +
+                         std::to_string(msg.eventId) + ".mp4";
+        try {
+            upload_ = std::make_unique<HttpUpload>(url, cfg_.recordToken,
+                static_cast<std::size_t>(cfg_.httpBufferMaxMiB) * 1024U * 1024U,
+                cfg_.httpTimeoutSec);
+        } catch (...) {
+            gst_object_unref(bus);
+            gst_object_unref(srcElement);
+            gst_object_unref(pipeline);
+            throw;
+        }
+        GstElement* sink = gst_bin_get_by_name(GST_BIN(pipeline), "upload_sink");
+        g_signal_connect(sink, "new-sample", G_CALLBACK(+[](GstAppSink* s, gpointer p) -> GstFlowReturn {
+            GstSample* sample = gst_app_sink_pull_sample(s);
+            if (!sample) return GST_FLOW_ERROR;
+            GstBuffer* buffer = gst_sample_get_buffer(sample);
+            GstMapInfo map{};
+            bool ok = buffer && gst_buffer_map(buffer, &map, GST_MAP_READ);
+            if (ok) {
+                ok = static_cast<HttpUpload*>(p)->push(map.data, map.size);
+                gst_buffer_unmap(buffer, &map);
+            }
+            gst_sample_unref(sample);
+            return ok ? GST_FLOW_OK : GST_FLOW_ERROR;
+        }), upload_.get());
+        gst_object_unref(sink);
+    }
     const GstStateChangeReturn stateRet = gst_element_set_state(pipeline, GST_STATE_PLAYING);
     if (stateRet == GST_STATE_CHANGE_FAILURE) {
         LogLine(std::cerr) << "[REC] failed to start writer pipeline\n";
@@ -213,6 +321,7 @@ bool AsyncClipWriter::openSession(const Message& msg) {
         gst_object_unref(srcElement);
         gst_element_set_state(pipeline, GST_STATE_NULL);
         gst_object_unref(pipeline);
+        upload_.reset();
         return false;
     }
 
@@ -225,10 +334,12 @@ bool AsyncClipWriter::openSession(const Message& msg) {
     pipeline_ = pipeline;
     appsrc_ = srcElement;
     bus_ = bus;
+    httpSessionFailed_ = false;
     finalPath_ = filePath;
     partialPath_ = filePath + ".part";
 
-    LogLine(std::cout) << "[REC] START event=" << activeEventId_ << " file=" << filePath
+    LogLine(std::cout) << (http ? "[SEND START] event=" : "[REC] START event=") << activeEventId_
+                       << " destination=" << (http ? "http" : filePath)
                        << " preroll_packets=" << msg.preRoll.size() << "\n";
     return true;
 }
@@ -238,6 +349,13 @@ bool AsyncClipWriter::writePacket(const std::shared_ptr<EncodedPacket>& packet) 
         return false;
     if (lastPtsNs_ >= 0 && packet->ptsNs <= lastPtsNs_)
         return true;
+    if (upload_) {
+        if (upload_->failed()) return false;
+        if (shutdownDeadlineNs_ != 0 && writerNowNs() >= shutdownDeadlineNs_) return false;
+        const auto queued = gst_app_src_get_current_level_bytes(GST_APP_SRC(appsrc_));
+        const auto limit = static_cast<std::size_t>(cfg_.httpBufferMaxMiB) * 1024U * 1024U;
+        if (packet->data.size() > limit || queued > limit - packet->data.size()) return false;
+    }
 
     GstBuffer* buffer = gst_buffer_new_allocate(nullptr, packet->data.size(), nullptr);
     if (buffer == nullptr)
@@ -269,11 +387,21 @@ void AsyncClipWriter::closeSession() {
     if (pipeline_ == nullptr)
         return;
 
+    const bool http = cfg_.recordDestination == "http";
+    const auto eventId = activeEventId_;
+    if (http && (httpSessionFailed_ || eventId <= abortedThrough_.load())) {
+        upload_->cancel();
+        httpSessionFailed_ = true;
+    }
     gst_app_src_end_of_stream(GST_APP_SRC(appsrc_));
 
+    double eosWait = cfg_.writerEosTimeoutSec;
+    if (http && shutdownDeadlineNs_ != 0)
+        eosWait = std::max(0.0, std::min(eosWait,
+            (shutdownDeadlineNs_ - writerNowNs()) / 1e9 - cfg_.httpTimeoutSec));
     GstMessage* msg = gst_bus_timed_pop_filtered(
         static_cast<GstBus*>(bus_),
-        static_cast<GstClockTime>(cfg_.writerEosTimeoutSec * GST_SECOND),
+        httpSessionFailed_ ? 0 : static_cast<GstClockTime>(eosWait * GST_SECOND),
         static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
 
     bool complete = false;
@@ -284,7 +412,7 @@ void AsyncClipWriter::closeSession() {
             gst_message_parse_error(msg, &err, &debug);
             LogLine(std::cerr) << "[REC] writer error: " << (err ? err->message : "unknown")
                                << "\n";
-            fail(std::string("Encoded writer: ") + (err ? err->message : "unknown"));
+            if (!http) fail(std::string("Encoded writer: ") + (err ? err->message : "unknown"));
             if (err)
                 g_error_free(err);
             if (debug)
@@ -294,15 +422,28 @@ void AsyncClipWriter::closeSession() {
         gst_message_unref(msg);
     } else {
         LogLine(std::cerr) << "[REC] writer EOS timeout for event=" << activeEventId_ << "\n";
-        fail("Encoded writer EOS timeout");
+        if (!http) fail("Encoded writer EOS timeout");
     }
 
-    LogLine(std::cout) << "[REC] STOP event=" << activeEventId_ << "\n";
+    LogLine(std::cout) << (http ? "[SEND STOP] event=" : "[REC] STOP event=") << activeEventId_ << "\n";
 
     gst_element_set_state(static_cast<GstElement*>(pipeline_), GST_STATE_NULL);
     gst_object_unref(static_cast<GstBus*>(bus_));
     gst_object_unref(static_cast<GstElement*>(appsrc_));
     gst_object_unref(static_cast<GstElement*>(pipeline_));
+
+    if (http) {
+        if (!complete || httpSessionFailed_) upload_->cancel();
+        const double wait = shutdownDeadlineNs_ != 0
+            ? std::max(0.0, (shutdownDeadlineNs_ - writerNowNs()) / 1e9) : -1;
+        if (upload_->finish(wait) && complete && !httpSessionFailed_) {
+            ++sentEvents_;
+            LogLine(std::cout) << "[SEND READY] event=" << eventId << " confirmed_by_server=1\n";
+        } else {
+            dropEvent(eventId, upload_->error().c_str());
+        }
+        upload_.reset();
+    }
 
     pipeline_ = nullptr;
     appsrc_ = nullptr;
@@ -310,7 +451,7 @@ void AsyncClipWriter::closeSession() {
     activeEventId_ = 0;
     baseTimeNs_ = 0;
     lastPtsNs_ = -1;
-    if (complete && !hasError()) {
+    if (!http && complete && !hasError()) {
         std::error_code error;
         fs::rename(partialPath_, finalPath_, error);
         if (error)
@@ -338,8 +479,11 @@ void EncodedRecorder::purgeRingLocked(std::int64_t newestPtsNs) {
     const std::int64_t keepNs =
         static_cast<std::int64_t>(keepSec * static_cast<double>(GST_SECOND));
     const std::int64_t cutoff = newestPtsNs - keepNs;
-    while (!ring_.empty() && ring_.front()->ptsNs < cutoff)
+    const auto byteLimit = static_cast<std::size_t>(cfg_.recordRingMaxMiB) * 1024U * 1024U;
+    while (!ring_.empty() && (ring_.front()->ptsNs < cutoff || ringBytes_ > byteLimit)) {
+        ringBytes_ -= ring_.front()->data.size();
         ring_.pop_front();
+    }
 }
 
 void EncodedRecorder::pushPacket(const std::shared_ptr<EncodedPacket>& packet) {
@@ -357,6 +501,7 @@ void EncodedRecorder::pushPacket(const std::shared_ptr<EncodedPacket>& packet) {
         lastKeyframePtsNs_ = packet->ptsNs;
     }
     ring_.push_back(packet);
+    ringBytes_ += packet->data.size();
     purgeRingLocked(packet->ptsNs);
 
     if (active_ && packet->ptsNs > lastForwardedPtsNs_) {
