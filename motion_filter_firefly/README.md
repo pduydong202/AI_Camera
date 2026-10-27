@@ -2,7 +2,12 @@
 
 Bộ lọc chuyển động dành cho **Firefly RK3588**, sử dụng giải mã H.264/H.265 bằng MPP, thu nhỏ NV12 bằng RGA, xử lý thuật toán L1/L2/L3 trên CPU và ghi lại clip sự kiện từ luồng nén gốc.
 
-Dự án được phát triển bằng **C++17 và Bash**, không yêu cầu Python để chạy hoặc kiểm thử.
+Dự án dùng **C++17 và Bash** trên Firefly. Bộ nhận thử nghiệm trên Optiplex dùng Python 3, FFmpeg và GStreamer; test tích hợp HTTP cũng dùng Python.
+
+**Đầu ra mặc định hiện tại:** gửi video sự kiện trực tiếp qua HTTP tới Optiplex,
+giữ pre/post-roll trong RAM, không tạo file video trên Firefly. Cài đặt và kiểm
+thử hai máy theo [NETWORK_DELIVERY.md](docs/NETWORK_DELIVERY.md). Các số đo tải và
+bằng chứng ngày 15/10 dưới đây thuộc đường recorder file trước khi thêm HTTP.
 
 Hệ thống hướng tới xử lý nhiều camera RTSP, giảm lượng video không cần thiết phải truyền tới máy chủ AI bằng cách chỉ lưu các đoạn video có sự kiện chuyển động.
 
@@ -41,9 +46,12 @@ Cấu hình được quản lý tập trung:
 - OpenCV development files.
 - GStreamer và plugin `rockchipmpp`.
 - Header và thư viện `librga`.
+- Header và thư viện `libcurl` (`libcurl4-openssl-dev`).
 - Bash, GNU coreutils, procps, util-linux, awk và tar.
 
-FFmpeg/ffprobe được sử dụng để kiểm tra clip trong bộ self-test và gói chứng cứ. Nếu thiếu, những bước kiểm tra media tương ứng được bỏ qua.
+FFmpeg/ffprobe và Python 3 là bắt buộc cho test tích hợp HTTP. Một số bước kiểm
+tra media cũ trong collector vẫn được bỏ qua khi thiếu FFmpeg; điều đó không
+thay cho test HTTP đầy đủ.
 
 Repository không cung cấp thư viện MPP/RGA thay thế. Các thành phần này cần được cài đặt và cấu hình phù hợp trên thiết bị.
 
@@ -192,7 +200,9 @@ Thông số mặc định:
 
 Khi phát hiện chuyển động hợp lệ, hệ thống tạo clip sự kiện bao gồm khoảng thời gian trước và sau sự kiện.
 
-Clip được ghi từ luồng video nén gốc, không phải video mask hoặc ảnh đã thu nhỏ.
+Clip dùng luồng video nén gốc. Ở chế độ HTTP, Firefly gửi MP4 phân mảnh; Optiplex
+remux thành MP4 thông thường, không encode lại. Chế độ `record_destination: "file"`
+vẫn có để chạy đối chiếu recorder cũ.
 
 Thời gian pre-roll thực tế còn phụ thuộc vào keyframe và GOP của nguồn video.
 
@@ -280,6 +290,10 @@ Chi tiết: [VALIDATION.md](docs/VALIDATION.md).
 
 Sau khi chạy, hệ thống tạo các thư mục:
 
+Ví dụ bên dưới mô tả **chế độ file**. Với mặc định HTTP, `events.csv` và log vẫn
+nằm trên Firefly, còn video/metadata nằm trong `received/<device>/<camera>/<session>/<event>/`
+trên Optiplex; không có clip local. Xem [hướng dẫn HTTP](docs/NETWORK_DELIVERY.md).
+
 ```text
 motion_filter_firefly/
 ├── output/
@@ -327,11 +341,12 @@ Dòng `cameras_with_perf=8/8` chỉ cho biết cả 8 log đã xuất hiện b�
 
 Thư mục `evidence/` lưu gói chứng cứ, bao gồm log, báo cáo và clip mẫu theo giới hạn YAML.
 
-Clip đầy đủ được lưu trong `output/`.
+Ở chế độ file, clip đầy đủ nằm trong `output/`. Ở chế độ HTTP, video nằm trên Optiplex.
 
 `validation_enabled` cho phép xuất thêm clip mask để kiểm tra. `l2_capture_enabled` bật capture L2 liên tục và có thể làm tăng mức sử dụng RAM hoặc đĩa.
 
-Hệ thống chưa tự động upload clip lên máy chủ khác và chưa tự xóa output cũ. Cần thiết lập chính sách lưu trữ và quản lý dung lượng nếu triển khai lâu dài.
+Chế độ HTTP gửi trực tiếp sự kiện tới bộ nhận; chưa tự xóa output cũ hoặc video
+đã nhận trên Optiplex. Cần thiết lập chính sách lưu trữ và quản lý dung lượng.
 
 ## 9. Quản lý tiến trình và khôi phục
 
@@ -382,7 +397,7 @@ Chưa xác nhận đầy đủ:
 - Hoạt động liên tục 24/7 trong thời gian dài.
 - Hiệu năng trên nhiều camera vật lý độc lập với nguồn RTSP khác nhau.
 - Độ chính xác thuật toán trên tập video đa dạng.
-- Quy trình tự động gửi clip tới máy chủ AI sau khi hoàn tất ghi.
+- Tích hợp xử lý AI sau khi máy chủ nhận clip; bản HTTP hiện tại mới nhận và lưu.
 
 Chi tiết: [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md).
 

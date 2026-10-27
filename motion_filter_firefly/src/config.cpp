@@ -129,6 +129,15 @@ Config loadConfig(const std::string& path) {
     R("writer_queue_max_messages", writerQueueMaxMessages);
     R("writer_appsrc_max_bytes", writerAppsrcMaxBytes);
     R("writer_eos_timeout_sec", writerEosTimeoutSec);
+    R("record_destination", recordDestination);
+    R("record_server_url_env", recordServerUrlEnv);
+    R("record_token_env", recordTokenEnv);
+    R("record_device_id", recordDeviceId);
+    R("record_ring_max_mib", recordRingMaxMiB);
+    R("writer_queue_max_mib", writerQueueMaxMiB);
+    R("http_buffer_max_mib", httpBufferMaxMiB);
+    R("http_fragment_ms", httpFragmentMs);
+    R("http_timeout_sec", httpTimeoutSec);
     R("status_interval_sec", statusIntervalSec);
     R("system_sample_interval_sec", systemSampleIntervalSec);
     R("affinity_snapshot_after_sec", affinitySnapshotAfterSec);
@@ -202,6 +211,25 @@ Config loadConfig(const std::string& path) {
         throw std::runtime_error("At least one GStreamer queue limit must be nonzero");
     positive("writer_appsrc_max_bytes", c.writerAppsrcMaxBytes);
     positive("writer_eos_timeout_sec", c.writerEosTimeoutSec);
+    if (c.recordDestination != "file" && c.recordDestination != "http")
+        throw std::runtime_error("record_destination must be file or http");
+    const std::regex envName("[A-Za-z_][A-Za-z0-9_]*"), identifier("[A-Za-z0-9_-]{1,100}");
+    if (!std::regex_match(c.recordServerUrlEnv, envName) ||
+        !std::regex_match(c.recordTokenEnv, envName) || c.recordServerUrlEnv == c.recordTokenEnv ||
+        !std::regex_match(c.recordDeviceId, identifier))
+        throw std::runtime_error("Invalid recording environment key or device id");
+    for (int budget : {c.recordRingMaxMiB, c.writerQueueMaxMiB, c.httpBufferMaxMiB})
+        if (budget < 1 || budget > 1024)
+            throw std::runtime_error("Recording byte budgets must be in [1,1024] MiB");
+    if (c.httpFragmentMs < 100 || c.httpFragmentMs > 10000 ||
+        !std::isfinite(c.httpTimeoutSec) || c.httpTimeoutSec < 1 || c.httpTimeoutSec > 60 ||
+        c.httpTimeoutSec * 1000 <= c.httpFragmentMs)
+        throw std::runtime_error("HTTP timeout must be 1..60 seconds and exceed fragment duration");
+    if (c.recordDestination == "http" && (c.validationEnabled || c.l2CaptureEnabled))
+        throw std::runtime_error("Disable validation/l2_capture for disk-free HTTP video output");
+    if (c.recordDestination == "http" && c.rtspReconnectEnabled &&
+        c.writerEosTimeoutSec + c.httpTimeoutSec + 2 >= c.rtspShutdownTimeoutSec)
+        throw std::runtime_error("HTTP completion waits must fit the watchdog shutdown deadline");
     if (c.rtspReconnectEnabled &&
         (c.writerEosTimeoutSec >= c.rtspShutdownTimeoutSec ||
          c.sourcePollTimeoutMs >= 1000 * std::min({c.rtspStartupTimeoutSec, c.rtspStallTimeoutSec,
@@ -246,6 +274,10 @@ void writeRuntimeSettings(const Config& c, std::ostream& output) {
     S("launcher_poll_ms", launcherPollMs);
     S("evidence_sample_clip_count", evidenceSampleClipCount);
     S("evidence_sample_max_mib", evidenceSampleMaxMiB);
+    S("record_enabled", recordEnabled);
+    S("record_destination", recordDestination);
+    S("record_server_url_env", recordServerUrlEnv);
+    S("record_token_env", recordTokenEnv);
 #undef S
 }
 

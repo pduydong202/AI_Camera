@@ -340,6 +340,21 @@ int main(int argc, char** argv) {
                                        options, stopFlag, std::cout);
         }
         const recovery::Progress progress(progressFd);
+        if (cfg.recordEnabled && cfg.recordDestination == "http") {
+            const auto* url = std::getenv(cfg.recordServerUrlEnv.c_str());
+            const auto* token = std::getenv(cfg.recordTokenEnv.c_str());
+            if (!url || !token || !*url || !*token)
+                throw std::runtime_error("Set video server URL/token environment variables before running");
+            cfg.recordServerUrl = url;
+            cfg.recordToken = token;
+            if ((cfg.recordServerUrl.rfind("http://", 0) != 0 &&
+                 cfg.recordServerUrl.rfind("https://", 0) != 0) ||
+                cfg.recordServerUrl.find_first_of("\r\n\t ?#@") != std::string::npos ||
+                cfg.recordToken.find_first_of("\r\n") != std::string::npos)
+                throw std::runtime_error("Invalid video server URL/token (use a base HTTP(S) URL without credentials)");
+            while (!cfg.recordServerUrl.empty() && cfg.recordServerUrl.back() == '/')
+                cfg.recordServerUrl.pop_back();
+        }
         gst_init(&argc, &argv);
         cv::setUseOptimized(true);
         cv::setNumThreads(cfg.opencvThreads);
@@ -348,10 +363,13 @@ int main(int argc, char** argv) {
                 throw std::runtime_error("Invalid run id");
             cfg.outputRoot = (fs::path(cfg.outputRoot) / run).string();
         }
-        const fs::path root = fs::path(cfg.outputRoot) / camera / "sessions" / sessionId();
+        cfg.recordCameraId = camera;
+        cfg.recordSessionId = sessionId();
+        const fs::path root = fs::path(cfg.outputRoot) / camera / "sessions" / cfg.recordSessionId;
         cfg.outputRoot = root.string();
-        fs::create_directories(root / "clips");
-        fs::create_directories(root / "masks");
+        fs::create_directories(root);
+        if (cfg.recordDestination == "file") fs::create_directories(root / "clips");
+        if (cfg.validationEnabled) fs::create_directories(root / "masks");
 
         std::ofstream eventCsv(root / "events.csv");
         eventCsv.exceptions(std::ios::badbit | std::ios::failbit);
@@ -466,7 +484,7 @@ int main(int argc, char** argv) {
             << "\n"
             << "Warmup             : " << cfg.startupWarmupSec << " s\n"
             << "Event min ratio    : " << cfg.eventMinValidRatio << "\n"
-            << "Recorder           : compressed H264/H265 PTS/keyframe ring\n"
+            << "Recorder           : " << cfg.recordDestination << " (compressed PTS/keyframe RAM ring)\n"
             << "Output             : " << root << "\n"
             << "================================================\n";
 

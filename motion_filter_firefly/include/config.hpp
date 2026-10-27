@@ -94,6 +94,19 @@ struct Config {
     int writerAppsrcMaxBytes = 200000;
     double writerEosTimeoutSec = 10.0;
 
+    // HTTP is the shipped destination. "file" is retained for regression/replay.
+    std::string recordDestination = "file";
+    std::string recordServerUrlEnv = "VIDEO_SERVER_URL";
+    std::string recordTokenEnv = "VIDEO_SERVER_TOKEN";
+    std::string recordDeviceId = "firefly01";
+    int recordRingMaxMiB = 32;
+    int writerQueueMaxMiB = 32;
+    int httpBufferMaxMiB = 8;
+    int httpFragmentMs = 1000;
+    double httpTimeoutSec = 5.0;
+    // Set by main for each worker; secrets never enter runtime-settings/logs.
+    std::string recordServerUrl, recordToken, recordCameraId, recordSessionId;
+
     // Launcher/measurement settings are exported by --runtime-settings after
     // the same strict validation used by the camera workers.
     int statusIntervalSec = 10;

@@ -2,6 +2,29 @@
 
 `config.yaml` là cấu hình vận hành duy nhất; danh sách camera nằm cuối file. Dùng cú pháp OpenCV YAML (`%YAML:1.0`), cờ số nguyên 0/1. Mọi khóa đều bắt buộc. Loader từ chối khóa sai/trùng, sai kiểu, NaN, giá trị ngoài miền cho phép và ring ngắn hơn pre-roll. Sửa YAML rồi khởi động lại; chưa có hot reload.
 
+## Đầu ra HTTP mới
+
+Mặc định `record_destination: "http"`; cấu hình cũ cần bổ sung các khóa bên dưới.
+URL/token lấy từ `.env` qua launcher; chạy binary trực tiếp thì export các biến
+tương ứng. Hướng dẫn đầy đủ: [NETWORK_DELIVERY.md](NETWORK_DELIVERY.md).
+
+| Khóa | Mặc định | Ý nghĩa |
+| --- | --- | --- |
+| `record_destination` | `http` | `http` gửi thẳng, `file` giữ recorder local để đối chiếu |
+| `record_server_url_env` | `VIDEO_SERVER_URL` | Tên biến chứa base URL LAN/VPN/HTTPS |
+| `record_token_env` | `VIDEO_SERVER_TOKEN` | Tên biến chứa bearer token, không log giá trị |
+| `record_device_id` | `firefly01` | ID riêng cho từng thiết bị gửi |
+| `record_ring_max_mib` | 32 | Trần byte ring packet nén, áp dụng cả file/HTTP |
+| `writer_queue_max_mib` | 32 | Trần byte packet chờ writer HTTP |
+| `http_buffer_max_mib` | 8 | Trần riêng cho appsrc và bộ đệm upload HTTP |
+| `http_fragment_ms` | 1000 | Khoảng fragment MP4; 100..10000 ms |
+| `http_timeout_sec` | 5 | Timeout mạng/hoàn tất; 1..60 giây, dài hơn fragment |
+
+Các ngân sách RAM phải trong 1..1024 MiB. Tổng chờ EOS + HTTP + khoảng dự phòng
+phải nhỏ hơn deadline shutdown watchdog. HTTP mode yêu cầu tắt validation và
+L2 capture để không ghi dữ liệu video chẩn đoán trên Firefly. Hết byte/message
+budget làm rơi sự kiện thay vì chặn luồng phân tích; xem `SEND FAILED` trong log.
+
 Giá trị mặc định của bản giao giữ hành vi đã đo. Các giá trị khởi tạo trong `Config` phục vụ đối tượng C++/test; loader không dùng chúng để âm thầm bù khóa YAML bị thiếu. Các YAML từ gói thử nghiệm cũ không phải cấu hình tương thích để chép đè.
 
 ## Ảnh, tốc độ và CPU

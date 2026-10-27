@@ -1,0 +1,23 @@
+[Unit]
+Description=Motion event receiver (LAN/VPN test service)
+After=network.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+WorkingDirectory=/opt/ai-camera/event_receiver
+EnvironmentFile=/etc/motion-event-receiver.env
+ExecStart=/usr/bin/python3 /opt/ai-camera/event_receiver/server.py
+Restart=on-failure
+RestartSec=3
+StateDirectory=motion-event-receiver
+CacheDirectory=motion-event-receiver
+Environment=GST_REGISTRY=/var/cache/motion-event-receiver/registry.bin
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

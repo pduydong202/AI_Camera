@@ -2,6 +2,7 @@
 
 #include "bounded_queue.hpp"
 #include "config.hpp"
+#include "http_upload.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -38,6 +39,8 @@ class AsyncClipWriter {
     }
 
     std::string errorMessage() const;
+    std::uint64_t sentEvents() const { return sentEvents_.load(); }
+    std::uint64_t lostEvents() const { return lostEvents_.load(); }
 
   private:
     enum class MessageType { Start, Packet, Stop };
@@ -48,7 +51,11 @@ class AsyncClipWriter {
         std::string codec;
         std::vector<std::shared_ptr<EncodedPacket>> preRoll;
         std::shared_ptr<EncodedPacket> packet;
+        std::size_t bytes = 0;
     };
+
+    bool enqueue(Message msg);
+    void dropEvent(std::uint64_t eventId, const char* reason);
 
     void run();
     bool openSession(const Message& msg);
@@ -72,6 +79,11 @@ class AsyncClipWriter {
     std::uint64_t activeEventId_ = 0;
     std::int64_t baseTimeNs_ = 0;
     std::int64_t lastPtsNs_ = 0;
+    std::unique_ptr<HttpUpload> upload_;
+    bool httpSessionFailed_ = false;
+    std::atomic<std::size_t> queuedBytes_{0};
+    std::atomic<std::uint64_t> abortedThrough_{0}, sentEvents_{0}, lostEvents_{0};
+    std::atomic<std::int64_t> shutdownDeadlineNs_{0};
 };
 
 class EncodedRecorder {
@@ -104,4 +116,5 @@ class EncodedRecorder {
     bool active_ = false;
     std::uint64_t activeEventId_ = 0;
     std::int64_t lastForwardedPtsNs_ = -1;
+    std::size_t ringBytes_ = 0;
 };

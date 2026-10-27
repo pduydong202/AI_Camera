@@ -8,6 +8,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 find_package(OpenCV REQUIRED COMPONENTS core imgproc video videoio imgcodecs)
 find_package(PkgConfig REQUIRED)
+pkg_check_modules(CURL REQUIRED IMPORTED_TARGET libcurl)
 pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
 find_path(RGA_INCLUDE_DIR NAMES rga/im2d.hpp)
 find_library(RGA_LIBRARY NAMES rga)
@@ -21,9 +22,10 @@ add_executable(motion_filter
   src/motion_pipeline.cpp
   src/event_manager.cpp
   src/recorder.cpp
+  src/http_upload.cpp
   src/validation_recorder.cpp)
 target_include_directories(motion_filter PRIVATE include ${OpenCV_INCLUDE_DIRS} ${RGA_INCLUDE_DIR})
-target_link_libraries(motion_filter PRIVATE ${OpenCV_LIBS} PkgConfig::GSTREAMER ${RGA_LIBRARY} pthread)
+target_link_libraries(motion_filter PRIVATE ${OpenCV_LIBS} PkgConfig::GSTREAMER PkgConfig::CURL ${RGA_LIBRARY} pthread)
 target_compile_options(motion_filter PRIVATE -Wall -Wextra -Wpedantic $<$<CONFIG:Release>:-O3>)
 add_executable(l2_capture_inspect tools/l2_capture_inspect.cpp)
 target_include_directories(l2_capture_inspect PRIVATE include)
