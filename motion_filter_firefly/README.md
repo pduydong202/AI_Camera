@@ -422,6 +422,7 @@ motion_filter_firefly/
 
 ## 12. Tài liệu bổ sung
 
+- [Báo cáo kiểm thử theo ngày](docs/test-reports/README.md) — FPS, CPU, nhiệt độ, bộ nhớ và độ tin cậy gửi video; [bài 8 luồng/8.000 giây ngày 28/10/2026](docs/test-reports/2026-10-28-8-streams-8000s.md).
 - [Algorithm](docs/ALGORITHM.md) — Logic thuật toán.
 - [Configuration](docs/CONFIGURATION.md) — Các tham số cấu hình.
 - [Validation](docs/VALIDATION.md) — Kết quả kiểm thử và chứng cứ.
