@@ -70,6 +70,14 @@ nhận clip hoàn chỉnh. `SEND FAILED` ghi lỗi truyền/hết bộ đệm; l
 worker phân tích kết thúc. Sự kiện tiếp theo mở kết nối mới, không replay toàn bộ
 sự kiện lỗi. Log/CSV vẫn ghi trên Firefly; không tạo clip hoặc video tạm ở HTTP mode.
 
+Khi writer lỗi, xem `[SEND DIAG]` để phân biệt upload, muxer, appsrc và giới hạn
+byte; log có số byte đang chờ trong từng lớp. `[SEND DETAIL]` giữ chi tiết lỗi
+gốc sau cleanup. Lỗi curl có thêm cổng TCP phía client, thời gian kết nối và số
+byte đã gửi để đối chiếu `[ACCEPT]`/`[UPLOAD START]` trên receiver. `[BUSY]` nghĩa
+là đã chạm giới hạn upload đang xử lý. Hàng đợi TCP chờ accept được đặt riêng,
+tối thiểu 16 hoặc gấp đôi `--max-uploads` (mặc định 32); không tăng số upload
+được xử lý đồng thời vượt giới hạn đã cấu hình.
+
 ## 3. Kiểm tra video trên Optiplex
 
 Đầu ra:

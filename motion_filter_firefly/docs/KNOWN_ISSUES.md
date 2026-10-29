@@ -14,6 +14,12 @@ Gói `motion_filter` không sửa binary, không thay thư viện hệ thống, 
 
 Ở bài 15 kết nối/10 phút, đã thấy nhiều PTS được sửa, encoded offset tối đa khoảng 5,52 giây. Clip mẫu giải mã được và có timestamp tăng dần không chứng minh mốc cắt luôn khớp sự kiện khi hai nhánh sửa PTS khác nhau. Bài toàn CPU chỉ 3 phút không đủ để kết luận đã giải quyết vấn đề này.
 
+Các số đo trên thuộc bản cũ. Bản sửa ngày 29/10 chuẩn hóa PTS chung trước tee,
+dùng MP4 độ phân giải microgiây và tăng hàng đợi TCP receiver; các bài H.264
+8 luồng nguồn thật/tạo lỗi đã qua đối chiếu clip. Xem [báo cáo kiểm thử](test-reports/2026-10-29-pts-http-validation.md).
+Vẫn cần chạy lại bài 8.000 giây; không suy ra H.265, mọi lỗi mạng hoặc độ khớp
+pre/post-roll với thời gian chụp thật chỉ từ timestamp hợp lệ của clip.
+
 `queue_age_ms` đo từ khi buffer decoded đến appsink tới lúc lấy ra; `local_delay_ms` đo từ mốc đó đến quyết định xong. Đây không phải tổng độ trễ camera→ứng dụng: chưa tính thời gian encode nguồn, mạng và jitterbuffer trước decoder.
 
 Các cửa sổ thuật toán dựa trên frame phân tích. Quá tải/bỏ frame có thể đổi tính chất phát hiện. Giữ mốc 8 kết nối đã đo, đánh giá lại với camera thực, bitrate và cảnh thực tế khi tăng tải.

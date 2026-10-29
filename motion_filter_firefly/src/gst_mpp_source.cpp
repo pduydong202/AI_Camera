@@ -114,6 +114,7 @@ GstMppSource::GstMppSource(const std::string& input, const Config& cfg, const st
     encodedSink_ = encoded;
     bus_ = bus;
     videoInfo_ = gst_video_info_new();
+    if (isRtsp_) installInputTimeline();
     if (cfg_.perfStatsEnabled != 0) {
         GstPad* pad = gst_element_get_static_pad(analysis, "sink");
         analysisProbePad_ = pad;
@@ -158,6 +159,12 @@ GstMppSource::GstMppSource(const std::string& input, const Config& cfg, const st
 
 GstMppSource::~GstMppSource() {
     stop();
+
+    if (inputTimelinePad_) {
+        if (inputTimelineProbeId_)
+            gst_pad_remove_probe(static_cast<GstPad*>(inputTimelinePad_), inputTimelineProbeId_);
+        gst_object_unref(static_cast<GstPad*>(inputTimelinePad_));
+    }
 
     if (analysisProbePad_ != nullptr) {
         if (analysisProbeId_ != 0) {
@@ -209,7 +216,7 @@ std::string GstMppSource::buildPipeline() const {
         ss << "filesrc location=" << quoteGst(input_) << " ! qtdemux ";
     }
 
-    ss << "! " << parser << " config-interval=-1 " << "! " << mediaCaps << " ";
+    ss << "! " << parser << " name=input_parser config-interval=-1 " << "! " << mediaCaps << " ";
 
     const std::string queue =
         "! queue max-size-buffers=" + std::to_string(cfg_.gstQueueMaxBuffers) +
@@ -234,6 +241,47 @@ std::string GstMppSource::buildPipeline() const {
     }
 
     return ss.str();
+}
+
+void GstMppSource::installInputTimeline() {
+    auto* parser = gst_bin_get_by_name(GST_BIN(pipeline_), "input_parser");
+    if (!parser) throw std::runtime_error("Missing input timeline parser");
+    auto* pad = gst_element_get_static_pad(parser, "src");
+    gst_object_unref(parser);
+    if (!pad) throw std::runtime_error("Missing input timeline pad");
+    inputTimelinePad_ = pad;
+    inputTimelineProbeId_ = gst_pad_add_probe(pad, GST_PAD_PROBE_TYPE_BUFFER,
+        [](GstPad*, GstPadProbeInfo* info, gpointer user) -> GstPadProbeReturn {
+            auto* self = static_cast<GstMppSource*>(user);
+            if (self->hasError_.load()) return GST_PAD_PROBE_DROP;
+            auto* buffer = GST_PAD_PROBE_INFO_BUFFER(info);
+            if (!buffer) return GST_PAD_PROBE_OK;
+            try {
+                const auto raw = toNs(GST_BUFFER_PTS(buffer));
+                const auto used = self->sourceTimeline_.normalize(raw, monotonicNs(),
+                    static_cast<std::int64_t>(self->cfg_.rtspStallTimeoutSec * GST_SECOND));
+                if (used != raw) {
+                    const auto rawDts = toNs(GST_BUFFER_DTS(buffer));
+                    buffer = gst_buffer_make_writable(buffer);
+                    GST_PAD_PROBE_INFO_DATA(info) = buffer;
+                    if (!buffer) throw std::runtime_error("Cannot repair input timestamp");
+                    GST_BUFFER_PTS(buffer) = static_cast<GstClockTime>(used);
+                    if (rawDts >= 0 && raw >= 0)
+                        GST_BUFFER_DTS(buffer) = static_cast<GstClockTime>(rawDts + (used - raw));
+                    LogLine(std::cout) << "[SOURCE_TIME] raw_pts_ns=" << raw
+                        << " used_pts_ns=" << used << " raw_dts_ns=" << rawDts
+                        << " repair=" << (raw < 0 ? "missing" : "nonincreasing_or_subtick")
+                        << " shared_before_tee=1\n";
+                }
+            } catch (const std::exception& e) {
+                std::lock_guard<std::mutex> lock(self->errorMutex_);
+                self->errorMessage_ = e.what();
+                self->hasError_.store(true);
+                return GST_PAD_PROBE_DROP;
+            }
+            return GST_PAD_PROBE_OK;
+        }, this, nullptr);
+    if (!inputTimelineProbeId_) throw std::runtime_error("Cannot install input timeline probe");
 }
 
 void GstMppSource::start() {

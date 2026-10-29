@@ -4,6 +4,8 @@ Các báo cáo ngắn tổng hợp cấu hình thử, FPS, CPU, nhiệt độ, b
 
 | Ngày | Bài thử | Báo cáo |
 |---|---|---|
+| 29/10/2026 | Bản sửa, 8 luồng / 8.000 giây, ngắt và nối lại nguồn | [Kết quả](2026-10-29-8-streams-8000s-reconnect.md) |
+| 29/10/2026 | Kiểm thử bản sửa PTS và HTTP, 8 luồng | [Kết quả](2026-10-29-pts-http-validation.md) |
 | 28/10/2026 | 8 luồng RTSP, 8.000 giây | [Kết quả](2026-10-28-8-streams-8000s.md) |
 
 Đặt tên theo mẫu `YYYY-MM-DD-ten-bai-thu.md`. Mỗi bài thử có một báo cáo ngắn để lưu lịch sử. Log, video và gói chứng cứ được giữ ngoài thư mục báo cáo.

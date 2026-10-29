@@ -35,6 +35,11 @@ std::string HttpUpload::error() const {
     return error_;
 }
 
+std::size_t HttpUpload::queuedBytes() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return queuedBytes_;
+}
+
 bool HttpUpload::push(const std::uint8_t* data, std::size_t size) noexcept {
     if (size == 0) return !failed_;
     try {
@@ -101,10 +106,12 @@ std::size_t HttpUpload::collectResponse(char* data, std::size_t size, std::size_
 
 void HttpUpload::run() noexcept {
     try {
+        char errorBuffer[CURL_ERROR_SIZE] = {};
         const auto cleanup = [](CURL* p) { if (p) curl_easy_cleanup(p); };
         std::unique_ptr<CURL, decltype(cleanup)> handle(curl_easy_init(), cleanup);
         if (!handle) throw std::runtime_error("Cannot create HTTP client");
         CURL* h = handle.get();
+        curl_easy_setopt(h, CURLOPT_ERRORBUFFER, errorBuffer);
         curl_slist* raw = nullptr;
         raw = curl_slist_append(raw, "Content-Type: video/mp4");
         raw = curl_slist_append(raw, "Transfer-Encoding: chunked");
@@ -140,6 +147,13 @@ void HttpUpload::run() noexcept {
             });
         curl_easy_setopt(h, CURLOPT_XFERINFODATA, this);
         const auto result = curl_easy_perform(h);
+        long localPort = 0;
+        double connectSec = 0.0, totalSec = 0.0;
+        curl_off_t uploadedBytes = 0;
+        curl_easy_getinfo(h, CURLINFO_LOCAL_PORT, &localPort);
+        curl_easy_getinfo(h, CURLINFO_CONNECT_TIME, &connectSec);
+        curl_easy_getinfo(h, CURLINFO_TOTAL_TIME, &totalSec);
+        curl_easy_getinfo(h, CURLINFO_SIZE_UPLOAD_T, &uploadedBytes);
         long status = 0;
         curl_easy_getinfo(h, CURLINFO_RESPONSE_CODE, &status);
         auto detail = responseBody_;
@@ -158,7 +172,12 @@ void HttpUpload::run() noexcept {
         if (status >= 300)
             fail(response);
         else if (result != CURLE_OK)
-            fail(std::string("HTTP transfer failed: ") + curl_easy_strerror(result) + " (" + response + ")");
+            fail(std::string("HTTP transfer failed: ") + curl_easy_strerror(result) +
+                 " detail=" + errorBuffer + " curl_code=" + std::to_string(static_cast<int>(result)) +
+                 " local_port=" + std::to_string(localPort) +
+                 " connect_ms=" + std::to_string(connectSec * 1000) +
+                 " total_ms=" + std::to_string(totalSec * 1000) +
+                 " uploaded_bytes=" + std::to_string(uploadedBytes) + " (" + response + ")");
         else if (status != 201)
             fail("receiver did not confirm creation (" + response + ")");
         else {
@@ -185,8 +204,7 @@ bool HttpUpload::finish(double waitSec) {
         changed_.notify_all();
         const auto wait = waitSec < 0 ? timeoutSec_ : std::min(timeoutSec_, waitSec);
         if (!changed_.wait_for(lock, std::chrono::duration<double>(wait), [&] { return done_; })) {
-            error_ = "receiver completion timeout";
-            failed_ = true;
+            if (!failed_.exchange(true)) error_ = "receiver completion timeout";
             changed_.notify_all();
         }
     }

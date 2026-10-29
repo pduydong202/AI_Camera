@@ -183,7 +183,7 @@ void AsyncClipWriter::run() {
                     for (const auto& p : m.preRoll) {
                         if (!writePacket(p)) {
                             if (http) {
-                                dropEvent(m.eventId, "cannot send pre-roll packet");
+                                dropEvent(m.eventId, sessionError_.c_str());
                                 httpSessionFailed_ = true;
                                 closeSession();
                             } else fail("Cannot write pre-roll packet");
@@ -200,7 +200,7 @@ void AsyncClipWriter::run() {
                 if (pipeline_ != nullptr && m.eventId == activeEventId_) {
                     if (!writePacket(m.packet)) {
                         if (http) {
-                            dropEvent(m.eventId, "network/muxer failed or buffer full");
+                            dropEvent(m.eventId, sessionError_.c_str());
                             httpSessionFailed_ = true;
                             closeSession();
                         } else fail("Cannot write encoded packet");
@@ -241,6 +241,8 @@ bool AsyncClipWriter::openSession(const Message& msg) {
     const std::string parser = (msg.codec == "h265") ? "h265parse" : "h264parse";
 
     const bool http = cfg_.recordDestination == "http";
+    // Preserve close, distinct RTP presentation times at microsecond resolution.
+    // Use the same track resolution when the receiver remuxes the upload.
     const std::string pipelineText =
         "appsrc name=src is-live=false format=time block=" + std::string(http ? "false" : "true") +
         " max-bytes=" +
@@ -249,10 +251,10 @@ bool AsyncClipWriter::openSession(const Message& msg) {
         "! " +
         parser +
         " " +
-        (http ? "! mp4mux fragment-duration=" + std::to_string(cfg_.httpFragmentMs) +
+        (http ? "! mp4mux trak-timescale=1000000 fragment-duration=" + std::to_string(cfg_.httpFragmentMs) +
                     " streamable=true ! appsink name=upload_sink emit-signals=true sync=false "
                     "max-buffers=1 drop=false wait-on-eos=false"
-              : "! mp4mux faststart=true ! filesink location=" + quoteGst(filePath + ".part") +
+              : "! mp4mux trak-timescale=1000000 faststart=true ! filesink location=" + quoteGst(filePath + ".part") +
                     " sync=false");
 
     GError* error = nullptr;
@@ -335,6 +337,7 @@ bool AsyncClipWriter::openSession(const Message& msg) {
     appsrc_ = srcElement;
     bus_ = bus;
     httpSessionFailed_ = false;
+    sessionError_.clear();
     finalPath_ = filePath;
     partialPath_ = filePath + ".part";
 
@@ -344,22 +347,46 @@ bool AsyncClipWriter::openSession(const Message& msg) {
     return true;
 }
 
+bool AsyncClipWriter::rejectPacket(const char* stage, const std::string& reason,
+                                   std::size_t packetBytes) {
+    sessionError_ = std::string(stage) + ": " + reason;
+    LogLine(std::cerr) << "[SEND DIAG] event=" << activeEventId_ << " stage=" << stage
+        << " reason=" << reason << " packet_bytes=" << packetBytes
+        << " writer_queue_bytes=" << queuedBytes_.load()
+        << " appsrc_bytes=" << (appsrc_ ? gst_app_src_get_current_level_bytes(GST_APP_SRC(appsrc_)) : 0)
+        << " http_bytes=" << (upload_ ? upload_->queuedBytes() : 0) << '\n';
+    return false;
+}
+
 bool AsyncClipWriter::writePacket(const std::shared_ptr<EncodedPacket>& packet) {
     if (pipeline_ == nullptr || appsrc_ == nullptr || !packet || packet->data.empty())
-        return false;
+        return rejectPacket("packet", "missing pipeline or empty packet", packet ? packet->data.size() : 0);
     if (lastPtsNs_ >= 0 && packet->ptsNs <= lastPtsNs_)
         return true;
     if (upload_) {
-        if (upload_->failed()) return false;
-        if (shutdownDeadlineNs_ != 0 && writerNowNs() >= shutdownDeadlineNs_) return false;
+        if (auto* message = gst_bus_pop_filtered(static_cast<GstBus*>(bus_), GST_MESSAGE_ERROR)) {
+            GError* error = nullptr;
+            gchar* debug = nullptr;
+            gst_message_parse_error(message, &error, &debug);
+            const std::string reason = error ? error->message : "unknown muxer error";
+            const std::string detail = debug ? debug : "";
+            if (error) g_error_free(error);
+            g_free(debug);
+            gst_message_unref(message);
+            return rejectPacket("muxer", reason + " detail=" + detail, packet->data.size());
+        }
+        if (upload_->failed()) return rejectPacket("upload", upload_->error(), packet->data.size());
+        if (shutdownDeadlineNs_ != 0 && writerNowNs() >= shutdownDeadlineNs_)
+            return rejectPacket("shutdown", "writer deadline reached", packet->data.size());
         const auto queued = gst_app_src_get_current_level_bytes(GST_APP_SRC(appsrc_));
         const auto limit = static_cast<std::size_t>(cfg_.httpBufferMaxMiB) * 1024U * 1024U;
-        if (packet->data.size() > limit || queued > limit - packet->data.size()) return false;
+        if (packet->data.size() > limit || queued > limit - packet->data.size())
+            return rejectPacket("appsrc", "byte budget exceeded", packet->data.size());
     }
 
     GstBuffer* buffer = gst_buffer_new_allocate(nullptr, packet->data.size(), nullptr);
     if (buffer == nullptr)
-        return false;
+        return rejectPacket("allocation", "cannot allocate encoded GstBuffer", packet->data.size());
     gst_buffer_fill(buffer, 0, packet->data.data(), packet->data.size());
 
     GST_BUFFER_PTS(buffer) = rebaseTime(packet->ptsNs, baseTimeNs_);
@@ -376,7 +403,7 @@ bool AsyncClipWriter::writePacket(const std::shared_ptr<EncodedPacket>& packet) 
     const GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC(appsrc_), buffer);
     if (ret != GST_FLOW_OK) {
         LogLine(std::cerr) << "[REC] appsrc push failed, flow=" << static_cast<int>(ret) << "\n";
-        return false;
+        return rejectPacket("appsrc", "push flow=" + std::to_string(static_cast<int>(ret)), packet->data.size());
     }
 
     lastPtsNs_ = packet->ptsNs;
@@ -412,6 +439,8 @@ void AsyncClipWriter::closeSession() {
             gst_message_parse_error(msg, &err, &debug);
             LogLine(std::cerr) << "[REC] writer error: " << (err ? err->message : "unknown")
                                << "\n";
+            if (http && sessionError_.empty())
+                sessionError_ = std::string("muxer: ") + (err ? err->message : "unknown");
             if (!http) fail(std::string("Encoded writer: ") + (err ? err->message : "unknown"));
             if (err)
                 g_error_free(err);
@@ -420,9 +449,12 @@ void AsyncClipWriter::closeSession() {
         } else if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_EOS)
             complete = true;
         gst_message_unref(msg);
-    } else {
+    } else if (!httpSessionFailed_) {
         LogLine(std::cerr) << "[REC] writer EOS timeout for event=" << activeEventId_ << "\n";
+        sessionError_ = "muxer: EOS timeout";
         if (!http) fail("Encoded writer EOS timeout");
+    } else {
+        LogLine(std::cout) << "[REC] writer aborted event=" << activeEventId_ << " eos_wait_skipped=1\n";
     }
 
     LogLine(std::cout) << (http ? "[SEND STOP] event=" : "[REC] STOP event=") << activeEventId_ << "\n";
@@ -440,7 +472,10 @@ void AsyncClipWriter::closeSession() {
             ++sentEvents_;
             LogLine(std::cout) << "[SEND READY] event=" << eventId << " confirmed_by_server=1\n";
         } else {
-            dropEvent(eventId, upload_->error().c_str());
+            const auto reason = sessionError_.empty() ? upload_->error()
+                : sessionError_ + " upload=" + upload_->error();
+            LogLine(std::cerr) << "[SEND DETAIL] event=" << eventId << " reason=" << reason << '\n';
+            dropEvent(eventId, reason.c_str());
         }
         upload_.reset();
     }

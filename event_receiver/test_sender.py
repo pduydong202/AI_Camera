@@ -19,13 +19,13 @@ def main():
     parser.add_argument("binary")
     parser.add_argument("fixture")
     parser.add_argument("--keep-failed", type=Path)
-    parser.add_argument("--fixture", type=Path, help="override the 80-frame 20-fps test fixture")
-    cases = ("good", "event", "jitter", "reject", "remux_reject", "recovery", "budget", "stall", "recheck")
+    parser.add_argument("--fixture", dest="fixture_override", type=Path, help="override the 80-frame 20-fps test fixture")
+    cases = ("good", "event", "jitter", "tiny", "reject", "remux_reject", "recovery", "budget", "stall", "recheck")
     parser.add_argument("--case", choices=cases, action="append", help="run selected integration case(s)")
     args = parser.parse_args()
     binary, fixture = str(Path(args.binary).resolve()), Path(args.fixture).resolve()
-    if args.fixture:
-        fixture = args.fixture.resolve()
+    if args.fixture_override:
+        fixture = args.fixture_override.resolve()
     for mode in args.case or cases:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -89,8 +89,8 @@ def main():
                         assert metadata["probe"]["fragment_defaults"]["duration_defaults_restored"] > 0
                         assert metadata["probe"]["timing"]["unique_pts"]
                     subprocess.run(["ffmpeg", "-v", "error", "-xerror", "-i", str(clip),
-                                    "-f", "null", "-"], check=True, timeout=15)
-                    subprocess.run([binary, "--verify-event" if mode == "event" else "--verify-jitter" if mode == "jitter" else "--verify",
+                                    "-vsync", "0", "-enc_time_base", "-1", "-f", "null", "-"], check=True, timeout=15)
+                    subprocess.run([binary, "--verify-event" if mode == "event" else "--verify-jitter" if mode == "jitter" else "--verify-tiny" if mode == "tiny" else "--verify",
                                     str(fixture), str(clip)], check=True, timeout=10)
                 if mode != "recheck":
                     assert not list((root / "remote").rglob("*.part")), "incomplete upload published"

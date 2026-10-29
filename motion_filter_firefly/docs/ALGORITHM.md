@@ -6,7 +6,13 @@ RTSP → depay/parser → tee: một nhánh lấy access unit nén để ghi cli
 
 Giới hạn FPS live dùng thời gian monotonic và credit burst có giới hạn; không thay PTS. Appsink ảnh có bộ đệm hữu hạn, có thể bỏ ảnh cũ khi quá tải. Nhánh nén không chủ động bỏ access unit để giữ chuỗi giải mã, nhưng có thể tạo backpressure khi ghi chậm. Chỉ queue ảnh decoded được phép drop theo YAML. Queue nén phải giữ thứ tự và không dùng leaky.
 
-Normalizer hiện tại giữ PTS dùng trong ứng dụng tăng dần khi PTS gốc thiếu/trùng/lùi. Chẩn đoán ghi riêng raw/used, lý do sửa và độ lệch cho hai nhánh. Quy tắc này chưa được thiết kế lại trong bản gom mã; có thể tạo chuỗi sửa kéo dài dưới tải cao.
+Với RTSP, PTS được kiểm tra một lần sau parser và trước tee để nhánh phân tích và nhánh ghi clip nhận cùng quyết định sửa. PTS hợp lệ tăng ít nhất một microgiây được giữ nguyên; timestamp thiếu/trùng/lùi hoặc sát nhau dưới một microgiây được tăng bằng bước nhỏ nhất một microgiây, có log `[SOURCE_TIME]`. Không cộng nguyên một frame danh nghĩa cho từng lỗi vì có thể tạo chuỗi catch-up kéo dài. Đây là sửa thứ tự timeline, không khôi phục thời gian chụp thật khi timestamp nguồn đã hỏng; các khoảng trống nguồn hợp lệ vẫn được giữ.
+
+MP4 trên Firefly và bước remux trên receiver dùng `trak-timescale=1000000`, độ phân giải một microgiây, để tránh hai PTS gần nhau bị làm tròn thành trùng nhau. Không đổi payload nén hoặc ép video về FPS cố định. Chẩn đoán `[PTS]` ở hai nhánh và cơ chế phòng vệ sau decoder vẫn được giữ; `[SEND DIAG]`/`[SEND DETAIL]` bổ sung vị trí lỗi và mức bộ đệm khi writer/upload lỗi.
+
+Trường `raw` trong `[PTS]` là timestamp tại đầu vào của từng consumer, sau bước sửa chung. Dùng `[SOURCE_TIME]` để xem timestamp nguồn trước/sau sửa; số lần sửa ở hai consumer bằng 0 không có nghĩa nguồn không từng phát timestamp lỗi.
+
+Nếu timestamp nguồn liên tục không khôi phục trong `rtsp_stall_timeout_sec`, nguồn được báo lỗi để supervisor reconnect. Không để một nguồn có đồng hồ hỏng vĩnh viễn tiếp tục chạy với timeline tăng quá chậm và không bao giờ qua warmup.
 
 ## L1: vùng ứng viên
 

@@ -4,6 +4,7 @@
 #include "live_frame_budget.hpp"
 #include "pts_diagnostics.hpp"
 #include "recorder.hpp"
+#include "source_timeline.hpp"
 
 #include <opencv2/core.hpp>
 
@@ -98,6 +99,7 @@ class GstMppSource {
 
   private:
     std::string buildPipeline() const;
+    void installInputTimeline();
 
     bool stopping() const {
         return stopRequested_.load() || (externalStop_ && externalStop_->load());
@@ -121,6 +123,9 @@ class GstMppSource {
     void* videoInfo_ = nullptr;
     void* analysisProbePad_ = nullptr;
     unsigned long analysisProbeId_ = 0;
+    void* inputTimelinePad_ = nullptr;
+    unsigned long inputTimelineProbeId_ = 0;
+    SourceTimeline sourceTimeline_;
     std::atomic<std::uint64_t> decodedFrames_{0};
     std::uint64_t lastPulledSequence_ = 0;
 
