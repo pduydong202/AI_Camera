@@ -28,4 +28,4 @@ Clip cuối phiên cũ được nhận xong lúc **12:14:14–16**; phiên khôi
 
 **Bản sửa đạt bài 8 luồng có ngắt nguồn; chưa cần thay thuật toán hoặc thiết kế lại kiến trúc cho tải này.** Nếu cần phục hồi nhanh hơn, ưu tiên xem lại giới hạn chờ reconnect và bổ sung timestamp cho log watchdog. Trước khi tăng lên 10 luồng, cần đo riêng: bốn lõi lớn đã dùng trung bình **73–74%**, còn MOG chiếm khoảng **16,2/26,5 ms** xử lý thuật toán mỗi frame. CPU tổng 51% không đồng nghĩa toàn bộ phần dư đều dùng được cho các luồng phân tích đang ghim vào lõi lớn.
 
-Bài này chưa đại diện tám camera độc lập hoặc vận hành 24/7. Log, manifest, kết quả kiểm tra và mẫu lệnh được giữ cục bộ trong `motion_filter_firefly/build_deploy/pts_trial_20261029/soak_review_20261029/` (Git bỏ qua).
+Bài này chưa đại diện tám camera độc lập hoặc vận hành 24/7. Log, manifest, kết quả kiểm tra và mẫu lệnh được giữ cục bộ trong `motion_filter_firefly/build_deploy/pts_trial_20261029/soak_review_20261029/` .
