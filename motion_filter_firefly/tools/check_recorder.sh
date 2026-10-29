@@ -12,4 +12,6 @@ read -r -a gst_flags <<< "$gst_options"
 if command -v ffmpeg >/dev/null; then
     ffmpeg -v error -xerror -i "$temporary_dir/output/good/clips/event_000001.mp4" -f null -
     printf 'PASS: generated clip decoded completely\n'
+    ffmpeg -v error -xerror -i "$temporary_dir/output/good_tiny/clips/event_000001.mp4" -vsync 0 -enc_time_base -1 -f null -
+    printf 'PASS: tiny-gap file clip decoded completely\n'
 fi

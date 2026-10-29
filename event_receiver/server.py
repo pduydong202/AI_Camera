@@ -119,8 +119,10 @@ def finalize_mp4(path):
     # streams. Link the video pad directly; never synthesize PTS or drop buffers.
     try:
         repairs = repair_streaming_defaults(path)
+        # Keep the sender's microsecond resolution; an automatic timescale can
+        # merge distinct close timestamps during this otherwise lossless remux.
         subprocess.run(["gst-launch-1.0", "-q", "filesrc", "location=" + json.dumps(str(path)),
-                        "!", "qtdemux", "name=demux", "demux.video_0", "!", "mp4mux", "faststart=true",
+                        "!", "qtdemux", "name=demux", "demux.video_0", "!", "mp4mux", "faststart=true", "trak-timescale=1000000",
                         "!", "filesink", "location=" + json.dumps(str(normalized))],
                        capture_output=True, timeout=10, check=True)
         normalized.replace(path)
@@ -148,6 +150,11 @@ class Receiver(ThreadingHTTPServer):
         self.token, self.max_bytes, self.timeout = token, max_bytes, timeout
         self.max_seconds = max_seconds
         self.slots = threading.BoundedSemaphore(max_uploads)
+        # TCP accept backlog is separate from the active-upload limit. Python's
+        # default backlog of five is too small for synchronized camera events.
+        self.request_queue_size = max(16, 2 * max_uploads)
+        self.connection_lock = threading.Lock()
+        self.connection_count = 0
         self.active, self.active_lock = set(), threading.Lock()
         if keep_failed_count < 0 or keep_failed_max_mib < 1:
             raise ValueError("invalid failed-sample diagnostic limits")
@@ -184,6 +191,7 @@ class Receiver(ThreadingHTTPServer):
 
     def process_request(self, request, client_address):
         if not self.slots.acquire(blocking=False):
+            print(f"[BUSY] client={client_address[0]}:{client_address[1]} active_limit_reached=1", flush=True)
             try:
                 request.settimeout(1)
                 request.sendall(b"HTTP/1.1 503 Busy\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")
@@ -191,9 +199,14 @@ class Receiver(ThreadingHTTPServer):
                 pass
             self.shutdown_request(request)
             return
+        with self.connection_lock:
+            self.connection_count += 1
+            print(f"[ACCEPT] client={client_address[0]}:{client_address[1]} active={self.connection_count}", flush=True)
         try:
             super().process_request(request, client_address)
         except BaseException:
+            with self.connection_lock:
+                self.connection_count -= 1
             self.slots.release()
             raise
 
@@ -201,6 +214,8 @@ class Receiver(ThreadingHTTPServer):
         try:
             super().process_request_thread(request, client_address)
         finally:
+            with self.connection_lock:
+                self.connection_count -= 1
             self.slots.release()
 
 
@@ -317,6 +332,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise Rejected(415, "expected video/mp4")
             device, camera, session, event = match.groups()
             key = (device, camera, session, event)
+            print(f"[UPLOAD START] camera={camera} session={session} event={event} client={self.client_address[0]}:{self.client_address[1]}", flush=True)
             parent = self.server.root / device / camera / session
             final = parent / event
             with self.server.active_lock:

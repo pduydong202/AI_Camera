@@ -60,6 +60,7 @@ class AsyncClipWriter {
     void run();
     bool openSession(const Message& msg);
     bool writePacket(const std::shared_ptr<EncodedPacket>& packet);
+    bool rejectPacket(const char* stage, const std::string& reason, std::size_t packetBytes);
     void closeSession();
     void fail(const std::string& message);
 
@@ -81,6 +82,7 @@ class AsyncClipWriter {
     std::int64_t lastPtsNs_ = 0;
     std::unique_ptr<HttpUpload> upload_;
     bool httpSessionFailed_ = false;
+    std::string sessionError_;
     std::atomic<std::size_t> queuedBytes_{0};
     std::atomic<std::uint64_t> abortedThrough_{0}, sentEvents_{0}, lostEvents_{0};
     std::atomic<std::int64_t> shutdownDeadlineNs_{0};

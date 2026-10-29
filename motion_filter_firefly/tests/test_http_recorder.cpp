@@ -4,7 +4,7 @@
 
 int main(int argc, char** argv) {
     try {
-        if (argc == 4 && (std::string(argv[1]) == "--verify" || std::string(argv[1]) == "--verify-event" || std::string(argv[1]) == "--verify-jitter")) {
+        if (argc == 4 && (std::string(argv[1]) == "--verify" || std::string(argv[1]) == "--verify-event" || std::string(argv[1]) == "--verify-jitter" || std::string(argv[1]) == "--verify-tiny")) {
             const bool event = std::string(argv[1]) == "--verify-event";
             const bool jitter = std::string(argv[1]) == "--verify-jitter";
             gst_init(&argc, &argv);
@@ -16,6 +16,10 @@ int main(int argc, char** argv) {
                         expected[i]->ptsNs += 500000;
                         expected[i]->dtsNs += 500000;
                     }
+            if (std::string(argv[1]) == "--verify-tiny") {
+                expected[4]->ptsNs = expected[3]->ptsNs + 11111;
+                expected[4]->dtsNs = expected[3]->dtsNs + 11111;
+            }
             if (event) {
                 const auto source = expected;
                 expected.clear();
@@ -29,8 +33,9 @@ int main(int argc, char** argv) {
             }
             check(expected.size() == actual.size(), "remote packet count changed");
             for (std::size_t i = 0; i < expected.size(); ++i) {
-                check(expected[i]->ptsNs == actual[i]->ptsNs, "remote PTS changed");
-                check(expected[i]->dtsNs == actual[i]->dtsNs, "remote DTS changed");
+                const auto tolerance = std::string(argv[1]) == "--verify-tiny" ? 1000 : 0;
+                check(std::abs(expected[i]->ptsNs - actual[i]->ptsNs) <= tolerance, "remote PTS changed beyond MP4 tick");
+                check(std::abs(expected[i]->dtsNs - actual[i]->dtsNs) <= tolerance, "remote DTS changed beyond MP4 tick");
                 check(expected[i]->keyframe == actual[i]->keyframe, "remote keyframe changed");
                 check(pictures(expected[i]->data) == pictures(actual[i]->data), "remote picture payload changed");
             }
@@ -58,6 +63,10 @@ int main(int argc, char** argv) {
                     packets[i]->ptsNs += 500000;
                     packets[i]->dtsNs += 500000;
                 }
+        if (mode == "tiny") {
+            packets[4]->ptsNs = packets[3]->ptsNs + 11111;
+            packets[4]->dtsNs = packets[3]->dtsNs + 11111;
+        }
         const auto started = std::chrono::steady_clock::now();
         AsyncClipWriter writer(cfg);
         writer.start();
@@ -106,7 +115,7 @@ int main(int argc, char** argv) {
         writer.close();
         check(!writer.hasError(), "network failure killed the analysis worker");
         check(writer.sentEvents() == (mode == "reject" ? 0U : 1U), "unexpected confirmed event count");
-        if (mode != "good" && mode != "event" && mode != "jitter")
+        if (mode != "good" && mode != "event" && mode != "jitter" && mode != "tiny")
             check(writer.lostEvents() >= 1, "missing lost event diagnostic");
         check(std::chrono::steady_clock::now() - started < std::chrono::seconds(12), "unbounded close");
         check(!fs::exists(cfg.outputRoot), "HTTP mode created a local video directory");

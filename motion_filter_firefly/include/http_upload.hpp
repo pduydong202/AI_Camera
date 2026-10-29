@@ -21,6 +21,7 @@ class HttpUpload {
     void cancel() noexcept;
     bool failed() const { return failed_.load(); }
     std::string error() const;
+    std::size_t queuedBytes() const;
 
   private:
     void run() noexcept;
