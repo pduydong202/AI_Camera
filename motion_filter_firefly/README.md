@@ -53,7 +53,10 @@ FFmpeg/ffprobe và Python 3 là bắt buộc cho test tích hợp HTTP. Một s�
 tra media cũ trong collector vẫn được bỏ qua khi thiếu FFmpeg; điều đó không
 thay cho test HTTP đầy đủ.
 
-Repository không cung cấp thư viện MPP/RGA thay thế. Các thành phần này cần được cài đặt và cấu hình phù hợp trên thiết bị.
+Giữ thư viện MPP/RGA của thiết bị. `build.sh` build plugin GStreamer Rockchip đã
+sửa deinit vào `build_gst/`; `run.sh` chọn plugin riêng, không thay `/usr/lib`.
+Cần thêm Python 3.10+, Ninja và mạng ở lần build đầu. Xem
+[quy trình plugin riêng](docs/ROCKCHIP_PLUGIN.md).
 
 ## 3. Cài đặt và chạy trên Firefly
 

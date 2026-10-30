@@ -1,0 +1,12 @@
+{
+  "plugin": {
+    "url": "https://codeload.github.com/JeffyCN/mirrors/tar.gz/66be2501caa40e4abe93c889a7364af2497ea1d7",
+    "commit": "66be2501caa40e4abe93c889a7364af2497ea1d7",
+    "sha256": "27e6006efbab6efab8a4c349a26109c44b61003d332cb3374fce244391a0037f"
+  },
+  "meson": {
+    "version": "0.61.5",
+    "url": "https://files.pythonhosted.org/packages/70/8d/28d7566c65e2bc06a39470ee1c349fb90079fb8ebd27d81ed17889f64cbd/meson-0.61.5.tar.gz",
+    "sha256": "5e9a0d65c1a51936362b9686d1c5e9e184a6fd245d57e7269750ce50c20f5d9a"
+  }
+}

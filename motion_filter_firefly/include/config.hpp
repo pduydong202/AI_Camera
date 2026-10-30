@@ -64,9 +64,9 @@ struct Config {
     // Firefly transport and decode policy.
     std::string decoderElement;
     int rtspLatencyMs;
-    // GStreamer rtspsrc enum: 3=auto (existing default), 0=RTP timestamps.
+    // GStreamer rtspsrc enum: 0=RTP timestamps (default), 3=auto.
     // Operational timestamp policy, separate from detection thresholds.
-    int rtspBufferMode = 3;
+    int rtspBufferMode = 0;
     int rtspDropOnLatency;
     int rtspUseTcp;
     // Process recovery applies to RTSP inputs only.

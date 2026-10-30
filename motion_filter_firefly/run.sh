@@ -76,6 +76,21 @@ for row in "${inventory_rows[@]}"; do
 done
 if ((dry_run)); then printf '[PLAN] cameras=%s seconds=%s; no connections started\n' "${#ids[@]}" "$duration"; exit 0; fi
 
+# Use the tested plugin only for this launcher and its children. The system
+# GStreamer installation and applications outside this project are unchanged.
+plugin_dir=${MOTION_GST_PLUGIN_DIR:-$project_dir/build_gst/prefix/lib/gstreamer-1.0}
+if [[ -f $plugin_dir/libgstrockchipmpp.so ]]; then
+    mkdir -p "$project_dir/build_gst"
+    export GST_PLUGIN_PATH_1_0="$plugin_dir${GST_PLUGIN_PATH_1_0:+:$GST_PLUGIN_PATH_1_0}"
+    export GST_REGISTRY_1_0="$project_dir/build_gst/registry.bin"
+    selected_plugin=$(gst-inspect-1.0 mppvideodec | sed -n 's/^[[:space:]]*Filename[[:space:]]*//p')
+    if [[ $(readlink -f -- "$selected_plugin") != $(readlink -f -- "$plugin_dir/libgstrockchipmpp.so") ]]; then
+        printf 'GStreamer selected an unexpected MPP plugin.\n' >&2; exit 1
+    fi
+elif [[ -z ${MOTION_FILTER_BIN:-} ]]; then
+    printf 'Fixed MPP plugin missing. Run python3 tools/build_rockchip_plugin.py first.\n' >&2; exit 1
+fi
+
 mkdir -p logs
 exec 9>logs/run.lock
 flock -n 9 || { printf 'Another launcher from this project is still running.\n' >&2; exit 1; }

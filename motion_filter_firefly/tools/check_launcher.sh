@@ -37,6 +37,14 @@ bash run.sh --replicas 3 --dry-run > "$temporary_dir/plan.txt"
 [[ ! -e SHOULD_NOT_EXIST ]]
 if grep -Fq "$literal_url" "$temporary_dir/plan.txt"; then printf 'URL leaked in plan.\n' >&2; exit 1; fi
 if grep -Fq 'test-secret' "$temporary_dir/plan.txt"; then printf 'Video token leaked in plan.\n' >&2; exit 1; fi
+mkdir -p build
+cp -- "$MOTION_FILTER_BIN" build/motion_filter
+if env -u MOTION_FILTER_BIN MOTION_GST_PLUGIN_DIR="$temporary_dir/no-plugin" \
+    bash run.sh --seconds 1 > "$temporary_dir/no-plugin.txt" 2>&1; then
+    printf 'Default launcher accepted a missing fixed MPP plugin.\n' >&2; exit 1
+fi
+grep -q 'Fixed MPP plugin missing' "$temporary_dir/no-plugin.txt"
+printf 'PASS: default launcher refuses to fall back to the broken system plugin\n'
 bash run.sh --replicas 3 --seconds 3 > "$temporary_dir/run.txt" 2>&1
 grep -q '\[RUN\] elapsed=1s' "$temporary_dir/run.txt"
 first_log=$(sed -n 's/.* logs=//p' "$temporary_dir/run.txt" | head -1)

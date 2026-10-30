@@ -72,7 +72,7 @@ Không có ngưỡng loại thành phần nhỏ theo diện tích riêng ngoài 
 | --- | --- | --- |
 | `decoder_element` | `mppvideodec` | Element giải mã Rockchip; phải xuất NV12 phù hợp RGA |
 | `rtsp_latency_ms` | 200 | Latency của jitterbuffer RTSP |
-| `rtsp_buffer_mode` | 3 | Enum GStreamer rtspsrc: 0 none, 1 slave, 2 buffer, 3 auto, 4 synced |
+| `rtsp_buffer_mode` | 0 | Giữ nhịp RTP; enum GStreamer rtspsrc: 0 none, 1 slave, 2 buffer, 3 auto, 4 synced |
 | `rtsp_drop_on_latency` | 0 | Cờ drop-on-latency của rtspsrc |
 | `rtsp_use_tcp` | 1 | 1 ép RTP interleaved TCP; 0 cho rtspsrc chọn transport |
 | `source_poll_timeout_ms` | 200 | Thời gian chờ mỗi lượt đọc appsink/bus; cũng ảnh hưởng nhịp quan sát dừng |
