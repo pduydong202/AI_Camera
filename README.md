@@ -19,7 +19,7 @@ Hệ thống phát hiện chuyển động và trích xuất video sự kiện t
 |---|---|---|
 | 🖥️ [motion_filter_wsl](motion_filter_wsl/) | Kiểm thử thuật toán với video offline | Windows / WSL |
 | 🔥 [motion_filter_firefly](motion_filter_firefly/) | Xử lý RTSP, tối ưu CPU với MPP/RGA | Firefly RK3588 |
-| [event_receiver](event_receiver/) | Nhận trực tiếp video sự kiện qua HTTP | Optiplex / Ubuntu |
+| 🗄️ [event_receiver](event_receiver/) | Nhận trực tiếp video sự kiện qua HTTP | Optiplex / Ubuntu |
 
 ### ⚙️ Processing Pipeline
 
