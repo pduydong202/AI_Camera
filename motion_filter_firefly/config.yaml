@@ -47,7 +47,8 @@ l2_capture_enabled: 0
 # Van chuyen RTSP va cac bo dem co gioi han.
 decoder_element: "mppvideodec"
 rtsp_latency_ms: 200
-rtsp_buffer_mode: 3
+# Giu nhip timestamp RTP; auto (3) co the gian/co PTS theo dong ho nhan.
+rtsp_buffer_mode: 0
 rtsp_drop_on_latency: 0
 rtsp_use_tcp: 1
 analysis_drop_old_frames: 1

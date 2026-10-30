@@ -3,6 +3,7 @@
 #include "log_line.hpp"
 #include "motion_timing.hpp"
 #include "redact.hpp"
+#include "rtsp_tail_guard.hpp"
 
 #include <gst/app/gstappsink.h>
 #include <gst/gst.h>
@@ -114,7 +115,14 @@ GstMppSource::GstMppSource(const std::string& input, const Config& cfg, const st
     encodedSink_ = encoded;
     bus_ = bus;
     videoInfo_ = gst_video_info_new();
-    if (isRtsp_) installInputTimeline();
+    if (isRtsp_) {
+        installInputTimeline();
+        auto* depay = gst_bin_get_by_name(GST_BIN(pipeline_), "input_depay");
+        if (!depay) throw std::runtime_error("RTSP depayloader unavailable");
+        try { rtspTailGuard_ = std::make_unique<RtspTailGuard>(depay); }
+        catch (...) { gst_object_unref(depay); throw; }
+        gst_object_unref(depay);
+    }
     if (cfg_.perfStatsEnabled != 0) {
         GstPad* pad = gst_element_get_static_pad(analysis, "sink");
         analysisProbePad_ = pad;
@@ -159,6 +167,7 @@ GstMppSource::GstMppSource(const std::string& input, const Config& cfg, const st
 
 GstMppSource::~GstMppSource() {
     stop();
+    rtspTailGuard_.reset();
 
     if (inputTimelinePad_) {
         if (inputTimelineProbeId_)
@@ -211,7 +220,7 @@ std::string GstMppSource::buildPipeline() const {
            << " drop-on-latency=" << (cfg_.rtspDropOnLatency != 0 ? "true" : "false") << " ";
         if (cfg_.rtspUseTcp != 0)
             ss << "protocols=tcp ";
-        ss << "! " << depay << " ";
+        ss << "! " << depay << " name=input_depay ! " << mediaCaps << " ";
     } else {
         ss << "filesrc location=" << quoteGst(input_) << " ! qtdemux ";
     }
@@ -257,6 +266,19 @@ void GstMppSource::installInputTimeline() {
             auto* buffer = GST_PAD_PROBE_INFO_BUFFER(info);
             if (!buffer) return GST_PAD_PROBE_OK;
             try {
+                if (!self->startupGate_.opened()) {
+                    GstMapInfo map{};
+                    if (!gst_buffer_map(buffer, &map, GST_MAP_READ))
+                        throw std::runtime_error("Cannot inspect RTSP startup access unit");
+                    const bool accept = self->startupGate_.accept(map.data, map.size,
+                                                                  self->codec_ == "h265");
+                    gst_buffer_unmap(buffer, &map);
+                    if (!accept) return GST_PAD_PROBE_DROP;
+                    LogLine(std::cout) << "[SOURCE_START] dropped_before_keyframe="
+                        << self->startupGate_.dropped()
+                        << " first_pts_ns=" << toNs(GST_BUFFER_PTS(buffer))
+                        << " shared_before_tee=1\n";
+                }
                 const auto raw = toNs(GST_BUFFER_PTS(buffer));
                 const auto used = self->sourceTimeline_.normalize(raw, monotonicNs(),
                     static_cast<std::int64_t>(self->cfg_.rtspStallTimeoutSec * GST_SECOND));
@@ -309,6 +331,8 @@ void GstMppSource::stop() {
     if (busThread_.joinable())
         busThread_.join();
     gst_element_set_state(static_cast<GstElement*>(pipeline_), GST_STATE_NULL);
+    if (rtspTailGuard_ && rtspTailGuard_->eosCount())
+        LogLine(std::cout) << "[SOURCE_EOS] bypass_depay_drain=1 complete_aus_only=1\n";
 }
 
 std::string GstMppSource::errorMessage() const {

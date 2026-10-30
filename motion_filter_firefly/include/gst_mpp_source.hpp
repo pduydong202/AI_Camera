@@ -5,6 +5,7 @@
 #include "pts_diagnostics.hpp"
 #include "recorder.hpp"
 #include "source_timeline.hpp"
+#include "startup_keyframe_gate.hpp"
 
 #include <opencv2/core.hpp>
 
@@ -41,6 +42,8 @@ struct GrayFrame {
     double fps = 0.0;
     FrameTiming timing;
 };
+
+class RtspTailGuard;
 
 class GstMppSource {
   public:
@@ -126,6 +129,8 @@ class GstMppSource {
     void* inputTimelinePad_ = nullptr;
     unsigned long inputTimelineProbeId_ = 0;
     SourceTimeline sourceTimeline_;
+    StartupKeyframeGate startupGate_;
+    std::unique_ptr<RtspTailGuard> rtspTailGuard_;
     std::atomic<std::uint64_t> decodedFrames_{0};
     std::uint64_t lastPulledSequence_ = 0;
 

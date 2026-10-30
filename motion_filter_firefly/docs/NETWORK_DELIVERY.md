@@ -32,10 +32,10 @@ Kết quả: `{"status": "ok"}`. Chạy cùng URL bằng IP Optiplex từ Firefl
 
 ## 2. Cấu hình Firefly
 
-Cài dependency mới `libcurl4-openssl-dev`; giữ nguyên MPP/RGA/OpenCV đã có:
+Cài dependency `libcurl4-openssl-dev`, Python 3 và Ninja; giữ thư viện MPP/RGA/OpenCV đã có:
 
 ```bash
-sudo apt-get install -y libcurl4-openssl-dev
+sudo apt-get install -y libcurl4-openssl-dev python3 ninja-build
 cd motion_filter_firefly
 ```
 
@@ -56,6 +56,10 @@ bash build.sh
 bash run.sh --dry-run
 bash run.sh --seconds 180
 ```
+
+`build.sh` tạo plugin Rockchip riêng có source/hash cố định; `run.sh` chọn đúng
+plugin đó. Lần build đầu cần mạng; không thay plugin hoặc thư viện MPP hệ thống.
+Xem [ROCKCHIP_PLUGIN.md](ROCKCHIP_PLUGIN.md) nếu chạy binary trực tiếp.
 
 Quan sát trên Firefly:
 

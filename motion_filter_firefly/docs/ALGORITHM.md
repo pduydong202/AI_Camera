@@ -4,7 +4,22 @@
 
 RTSP → depay/parser → tee: một nhánh lấy access unit nén để ghi clip, một nhánh qua MPP ra NV12. Ảnh NV12 được RGA thu nhỏ, CPU đọc Y plane trực tiếp; không đổi sang BGR trong đường xử lý chính. Tỷ lệ khung hình được giữ, kích thước chẵn để phù hợp NV12.
 
-Giới hạn FPS live dùng thời gian monotonic và credit burst có giới hạn; không thay PTS. Appsink ảnh có bộ đệm hữu hạn, có thể bỏ ảnh cũ khi quá tải. Nhánh nén không chủ động bỏ access unit để giữ chuỗi giải mã, nhưng có thể tạo backpressure khi ghi chậm. Chỉ queue ảnh decoded được phép drop theo YAML. Queue nén phải giữ thứ tự và không dùng leaky.
+RTSP mặc định dùng `buffer-mode=0` để giữ nhịp RTP của nguồn. Khi khởi động hoặc
+reconnect, gate trước tee chờ access unit random access (H.264 IDR hoặc H.265
+IRAP), ghi số AU bỏ qua trong `[SOURCE_START]`, rồi truyền mọi AU còn lại.
+Header hoặc P-frame chưa giải mã được trước keyframe không vào decoder/recorder;
+không bù thời gian bằng cách sửa nhịp các frame hợp lệ. Warmup bắt đầu từ ảnh
+giải mã hợp lệ đầu tiên; các ngưỡng và bước L1/L2/L3 không thay đổi.
+
+Depayloader RTSP thương lượng `alignment=au` trước parser. Khi nhận EOS do
+ngắt nguồn, guard chuyển EOS xuống parser mà không cho depayloader xả các
+slice đang ghép thành một hình chưa đầy đủ. AU đã hoàn chỉnh giữ nguyên
+payload và timestamp; phần đuôi chưa được xác nhận hoàn tất có thể bị bỏ.
+Nguồn thiếu RTP marker cũng chịu chính sách thận trọng này. Log
+`[SOURCE_EOS] complete_aus_only=1` xác nhận đường EOS, không phải số frame bỏ.
+Guard không áp dụng cho file đầu vào.
+
+Giới hạn FPS live dùng thời gian monotonic và credit burst có giới hạn; không thay PTS. Appsink ảnh có bộ đệm hữu hạn, có thể bỏ ảnh cũ khi quá tải. Sau keyframe khởi động, nhánh nén giữ các AU hoàn chỉnh theo thứ tự và có thể tạo backpressure khi ghi chậm. Chỉ queue ảnh decoded được phép drop theo YAML. Queue nén không dùng leaky.
 
 Với RTSP, PTS được kiểm tra một lần sau parser và trước tee để nhánh phân tích và nhánh ghi clip nhận cùng quyết định sửa. PTS hợp lệ tăng ít nhất một microgiây được giữ nguyên; timestamp thiếu/trùng/lùi hoặc sát nhau dưới một microgiây được tăng bằng bước nhỏ nhất một microgiây, có log `[SOURCE_TIME]`. Không cộng nguyên một frame danh nghĩa cho từng lỗi vì có thể tạo chuỗi catch-up kéo dài. Đây là sửa thứ tự timeline, không khôi phục thời gian chụp thật khi timestamp nguồn đã hỏng; các khoảng trống nguồn hợp lệ vẫn được giữ.
 
