@@ -1,7 +1,11 @@
 #include "motion_pipeline.hpp"
+#include "log_line.hpp"
+
+#include <opencv2/core/ocl.hpp>
 
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <vector>
@@ -18,6 +22,14 @@ MotionPipeline::MotionPipeline(const Config& cfg, double sourceFps, const cv::Si
     }
 
     // L1 remains a broad candidate generator. Defaults are explicit in YAML.
+    if (cfg_.l1OpenclEnabled) {
+        cv::ocl::setUseOpenCL(true);
+        if (!cv::ocl::useOpenCL() ||
+            !(cv::ocl::Device::getDefault().type() & cv::ocl::Device::TYPE_GPU)) {
+            throw std::runtime_error("l1_opencl_enabled requires an OpenCL GPU");
+        }
+        LogLine(std::cout) << "[MOG GPU] " << cv::ocl::Device::getDefault().name() << '\n';
+    }
     mog_ = cv::createBackgroundSubtractorMOG2(cfg_.l1HistoryFrames, cfg_.l1VarThreshold, false);
     mog_->setDetectShadows(false);
     mogHistory_ = std::max(1, mog_->getHistory());
@@ -559,7 +571,13 @@ FrameResult MotionPipeline::process(const cv::Mat& gray, std::int64_t ptsNs, cv:
     // L1: DETECT ALL FOREGROUND
     // ------------------------------
     cv::Mat raw;
-    mog_->apply(gray, raw, cfg_.l1LearningRate);
+    if (cfg_.l1OpenclEnabled) {
+        gray.copyTo(mogInput_);
+        mog_->apply(mogInput_, mogMask_, cfg_.l1LearningRate);
+        mogMask_.copyTo(raw);
+    } else {
+        mog_->apply(gray, raw, cfg_.l1LearningRate);
+    }
     perf.mark(MotionStage::Mog);
 
     // With detectShadows(false), OpenCV MOG2 already emits a binary 0/255

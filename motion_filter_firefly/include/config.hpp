@@ -39,6 +39,7 @@ struct Config {
     int l1HistoryFrames = 500;
     double l1VarThreshold = 16.0;
     double l1LearningRate = -1.0;
+    int l1OpenclEnabled = 0;
     int l1OpenKernelSize = 3;
     int l2HistoryFrames = 0; // 0 follows l1_history_frames, as before.
     int l2RepeatNeighborhoodSize = 3;

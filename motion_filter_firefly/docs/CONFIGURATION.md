@@ -53,6 +53,7 @@ Nếu nguồn 1920×1080, kích thước thực tế mặc định là 854×480.
 | `l1_history_frames` | 500 | History của MOG2, số nguyên >0 |
 | `l1_var_threshold` | 16.0 | Ngưỡng phương sai của MOG2, >0 |
 | `l1_learning_rate` | -1.0 | -1: OpenCV tự học; [0,1]: learning rate cố định |
+| `l1_opencl_enabled` | 0 | `1` chọn đường OpenCL cho MOG2 và yêu cầu GPU OpenCL. Đặt `OPENCV_OPENCL_DEVICE=:GPU:` khi chạy trên Firefly. Mask có thể lệch nhẹ so với CPU. |
 | `l1_open_kernel_size` | 3 | Cạnh kernel vuông OPEN; nguyên dương lẻ. **3 giữ phép OPEN 3×3**; 1 làm phép này trở thành đồng nhất |
 | `l2_history_frames` | 0 | 0 theo history MOG2; >0 là cửa sổ L2 độc lập |
 | `l2_repeat_neighborhood_size` | 3 | Cạnh neighborhood vùng lặp, đơn vị ô lưới; nguyên dương lẻ |

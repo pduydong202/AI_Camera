@@ -135,6 +135,7 @@ class MotionPipeline {
 
     // L1
     cv::Ptr<cv::BackgroundSubtractorMOG2> mog_;
+    cv::UMat mogInput_, mogMask_;
     int mogHistory_ = 1;
     cv::Mat cleanupKernel_;
 
