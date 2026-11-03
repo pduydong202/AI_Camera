@@ -70,6 +70,7 @@ int main(int argc, char** argv) {
         reject(replace(text, "l1_history_frames", "0"));
         reject(replace(text, "l1_var_threshold", "0.0"));
         reject(replace(text, "l1_learning_rate", "1.1"));
+        reject(replace(text, "l1_opencl_enabled", "2"));
         reject(replace(text, "l1_open_kernel_size", "2"));
         reject(replace(text, "l2_history_frames", "-1"));
         reject(replace(text, "l2_repeat_neighborhood_size", "0"));

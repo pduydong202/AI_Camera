@@ -88,6 +88,7 @@ Config loadConfig(const std::string& path) {
     R("l1_history_frames", l1HistoryFrames);
     R("l1_var_threshold", l1VarThreshold);
     R("l1_learning_rate", l1LearningRate);
+    R("l1_opencl_enabled", l1OpenclEnabled);
     R("l1_open_kernel_size", l1OpenKernelSize);
     R("l2_history_frames", l2HistoryFrames);
     R("l2_repeat_neighborhood_size", l2RepeatNeighborhoodSize);
@@ -247,6 +248,7 @@ Config loadConfig(const std::string& path) {
     F("analysis_allow_upscale", analysisAllowUpscale);
     F("analysis_sampling_enabled", analysisSamplingEnabled);
     F("analysis_sparse_l3_enabled", analysisSparseL3Enabled);
+    F("l1_opencl_enabled", l1OpenclEnabled);
     F("validation_enabled", validationEnabled);
     F("frame_stats_enabled", frameStatsEnabled);
     F("perf_stats_enabled", perfStatsEnabled);

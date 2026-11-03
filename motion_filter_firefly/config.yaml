@@ -20,6 +20,7 @@ startup_warmup_sec: 2.0
 l1_history_frames: 500
 l1_var_threshold: 16.0
 l1_learning_rate: -1.0  # -1: OpenCV tu dong; [0,1]: co dinh
+l1_opencl_enabled: 0  # 1: chay MOG2 bang OpenCL GPU
 l1_open_kernel_size: 3
 l2_history_frames: 0  # 0: theo l1_history_frames (mac dinh 500 frame)
 l2_repeat_neighborhood_size: 3
