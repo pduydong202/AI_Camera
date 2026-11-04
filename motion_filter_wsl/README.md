@@ -55,7 +55,7 @@ Các tham số cấu hình được quản lý thông qua YAML.
 
 ## 3. Cài đặt và chạy
 
-**Yêu cầu:** WSL/Linux, C++17, CMake, OpenCV và Bash.
+**Yêu cầu** gồm WSL hoặc Linux, Bash, `flock` (util-linux), `g++` hỗ trợ C++17, CMake 3.16 trở lên, `pkg-config` và thư viện phát triển OpenCV 4.
 
 Clone repository:
 
@@ -64,20 +64,28 @@ git clone https://github.com/pduydong202/AI_Camera.git
 cd AI_Camera/motion_filter_wsl
 ```
 
-Kiểm tra môi trường và biên dịch:
+Nếu repo đã có trên ổ `D:` của Windows, mở Ubuntu trong WSL và chuyển vào thư mục dự án.
+
+```bash
+cd /mnt/d/AI_Camera/motion_filter_wsl
+```
+
+Kiểm tra môi trường và biên dịch.
 
 ```bash
 bash check_wsl.sh
 bash build_wsl.sh
 ```
 
-Chạy với video đầu vào:
+Script build xác định thư mục dự án theo vị trí của chính nó. Nếu `build/CMakeCache.txt` chứa đường dẫn cũ, script chuyển thư mục build cũ vào `build_stale.XXXXXX/build` rồi tạo lại `build/` ở vị trí hiện tại. Có thể xóa bản lưu sau khi xác nhận build mới chạy được.
+
+Chạy từ thư mục `motion_filter_wsl` với đường dẫn video trong WSL.
 
 ```bash
-./build/motion_filter "/path/to/video.mp4"
+bash run_wsl.sh "/mnt/d/Videos/video.mp4"
 ```
 
-Thay đường dẫn ví dụ bằng đường dẫn video thực tế.
+Thay đường dẫn ví dụ bằng đường dẫn video thực tế. Script dùng `policy.yaml` nếu bạn bỏ qua đối số thứ hai. Bạn có thể truyền thêm `camera_id` sau đường dẫn policy để đặt tên thư mục camera. Mặc định chương trình lấy tên file video.
 
 ## 4. Cấu hình
 
@@ -91,9 +99,9 @@ Các cấu hình cho phép thử nghiệm thuật toán ở nhiều độ phân 
 
 ## 5. Kết quả đầu ra
 
-Hệ thống tạo clip sự kiện và các video mask để kiểm tra từng lớp.
+Theo cấu hình mặc định, mỗi lần chạy lưu kết quả trong `output/<camera_id>/sessions/<session_id>/`. Thư mục này chứa `events.csv`, `frame_stats.csv`, clip sự kiện trong `clips/` và các video mask.
 
-**Full-length masks:**
+**Mask toàn bộ video**
 
 ```text
 masks_full/
@@ -103,10 +111,13 @@ masks_full/
 └── full_VALID_motion.mp4
 ```
 
-**Event-aligned masks:**
+**Mask theo từng sự kiện**
 
 ```text
 masks/
+├── motion_XXXXXX_L1.mp4
+├── motion_XXXXXX_L2.mp4
+├── motion_XXXXXX_L3.mp4
 └── motion_XXXXXX_VALID.mp4
 ```
 
