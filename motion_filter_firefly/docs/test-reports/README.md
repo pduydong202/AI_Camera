@@ -4,6 +4,7 @@ Các báo cáo ngắn tổng hợp cấu hình thử, FPS, CPU, nhiệt độ, b
 
 | Ngày | Bài thử | Báo cáo |
 |---|---|---|
+| 05/11/2026 | 15 luồng × 30 phút, OpenCL, Wi-Fi 5 GHz và thời hạn HTTP | [Kết quả](2026-11-05-15-streams-30min.md) |
 | 30/10/2026 | Bản sửa RTSP/MPP, 8 luồng, timestamp lỗi và ngắt/nối | [Kết quả](2026-10-30-rtsp-mpp-fixes.md) |
 | 29/10/2026 | Điều tra gap RTP/PTS và lỗi deinit của plugin MPP | [Kết quả](2026-10-29-gap-mpp-investigation.md) |
 | 29/10/2026 | Bản sửa, 8 luồng / 8.000 giây, ngắt và nối lại nguồn | [Kết quả](2026-10-29-8-streams-8000s-reconnect.md) |
