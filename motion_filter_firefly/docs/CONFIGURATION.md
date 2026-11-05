@@ -18,7 +18,7 @@ tương ứng. Hướng dẫn đầy đủ: [NETWORK_DELIVERY.md](NETWORK_DELIVE
 | `writer_queue_max_mib` | 32 | Trần byte packet chờ writer HTTP |
 | `http_buffer_max_mib` | 8 | Trần riêng cho appsrc và bộ đệm upload HTTP |
 | `http_fragment_ms` | 1000 | Khoảng fragment MP4; 100..10000 ms |
-| `http_timeout_sec` | 5 | Timeout mạng/hoàn tất; 1..60 giây, dài hơn fragment |
+| `http_timeout_sec` | 15 | Timeout mạng/hoàn tất; 1..60 giây, dài hơn fragment |
 
 Các ngân sách RAM phải trong 1..1024 MiB. Tổng chờ EOS + HTTP + khoảng dự phòng
 phải nhỏ hơn deadline shutdown watchdog. HTTP mode yêu cầu tắt validation và
@@ -115,7 +115,7 @@ Ring nén và ring mask phải đủ pre-roll. Bật video mask/capture làm đ�
 | `rtsp_reconnect_enabled` | 1 | Supervisor tự hồi phục cho RTSP; không áp dụng file offline |
 | `rtsp_startup_timeout_sec` | 20.0 | Hạn chờ frame đầu tiên |
 | `rtsp_stall_timeout_sec` | 15.0 | Hạn không có tiến triển frame |
-| `rtsp_shutdown_timeout_sec` | 20.0 | Hạn cho worker đóng clip/nguồn trước khi buộc kill |
+| `rtsp_shutdown_timeout_sec` | 30.0 | Hạn cho worker đóng clip/nguồn trước khi buộc kill |
 | `rtsp_retry_initial_sec` | 1.0 | Backoff ban đầu |
 | `rtsp_retry_max_sec` | 30.0 | Trần backoff; ≥initial |
 | `rtsp_retry_reset_sec` | 30.0 | Đủ thời gian có frame để reset backoff |

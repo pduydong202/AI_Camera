@@ -261,7 +261,8 @@ Các phép thử được thực hiện trên Firefly RK3588 với luồng video
 - Cấu hình main CPU affinity 4–7 được giữ làm mặc định đã kiểm thử.
 - 8 kết nối là mốc tải đã đo đạt khoảng 20 FPS phân tích mỗi kết nối.
 - 10 kết nối chưa được xác nhận đạt yêu cầu.
-- 15 kết nối không duy trì được FPS mục tiêu trong các phép thử đã thực hiện.
+- Trong các bài CPU ở trên, 15 kết nối đạt khoảng 14 FPS phân tích mỗi kết nối.
+- Bài 30 phút với MOG2 OpenCL, Wi-Fi 5 GHz và thời hạn HTTP/dừng worker 15/30 giây đạt 20 FPS sau warmup trên cả 15 kết nối. Xem [báo cáo 30 phút](docs/test-reports/2026-11-05-15-streams-30min.md).
 
 Các phép thử sử dụng nhiều kết nối tới cùng một nguồn RTSP mô phỏng, không phải 8 hoặc 15 camera vật lý độc lập.
 
@@ -280,6 +281,14 @@ bash run.sh --replicas 8 --seconds 180
 `--replicas` chỉ sử dụng được khi YAML khai báo một camera. Đây là chế độ mô phỏng tải, không phải phương pháp khai báo nhiều camera thực tế.
 
 `--seconds 0` hoặc không khai báo `--seconds` nghĩa là chạy liên tục.
+
+Để lặp lại bài 15 kết nối, dùng liên kết 5 GHz trên Firefly, đặt `l1_opencl_enabled: 1`
+trong YAML đang chạy và dùng cặp thời hạn mặc định `http_timeout_sec: 15.0`,
+`rtsp_shutdown_timeout_sec: 30.0`. Firefly cần OpenCV thấy GPU OpenCL.
+
+```bash
+OPENCV_OPENCL_DEVICE=:GPU: bash run.sh --replicas 15 --seconds 1800
+```
 
 ### Trạng thái xác nhận
 

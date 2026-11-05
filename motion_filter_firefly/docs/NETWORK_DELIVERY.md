@@ -175,8 +175,9 @@ nhận có thể để lại thư mục `.part`; chúng không được coi là 
   trần byte packet chờ writer; `writer_queue_max_messages` vẫn là trần số message.
   `http_buffer_max_mib` (8): trần riêng cho appsrc và queue byte HTTP, chưa tính
   bộ nhớ nội bộ parser/muxer, thư viện mạng và kernel socket.
-- `http_fragment_ms` (1000), `http_timeout_sec` (5): thời gian fragment, timeout kết
-  nối/thiếu dữ liệu/tốc độ thấp và chờ xác nhận. Không đảm bảo giao đủ khi mạng
+- `http_fragment_ms` (1000), `http_timeout_sec` (15): thời gian fragment, timeout kết
+  nối/thiếu dữ liệu/tốc độ thấp và chờ xác nhận. `rtsp_shutdown_timeout_sec` (30)
+  dành thời gian để worker hoàn tất cả muxer và upload. Không đảm bảo giao đủ khi mạng
   mất lâu; không có file trên Firefly để replay. Quá tải làm rơi sự kiện và có log.
   Khi queue thiếu packet/Stop, các sự kiện tồn đọng tới ID lỗi cũng bị bỏ để phục
   hồi nhanh; log có `discard_pending_through`. Khi shutdown, backlog vượt thời

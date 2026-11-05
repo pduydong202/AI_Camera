@@ -71,7 +71,7 @@ record_ring_max_mib: 32
 writer_queue_max_mib: 32
 http_buffer_max_mib: 8
 http_fragment_ms: 1000
-http_timeout_sec: 5.0
+http_timeout_sec: 15.0
 record_ring_sec: 4.0
 writer_queue_max_messages: 1024
 writer_appsrc_max_bytes: 200000
@@ -81,7 +81,7 @@ writer_eos_timeout_sec: 10.0
 rtsp_reconnect_enabled: 1
 rtsp_startup_timeout_sec: 20.0
 rtsp_stall_timeout_sec: 15.0
-rtsp_shutdown_timeout_sec: 20.0
+rtsp_shutdown_timeout_sec: 30.0
 rtsp_retry_initial_sec: 1.0
 rtsp_retry_max_sec: 30.0
 rtsp_retry_reset_sec: 30.0
