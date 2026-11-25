@@ -47,8 +47,8 @@ def file_sha256(path):
     return digest.hexdigest()
 
 
-def inspect_mp4(path, strict_timing=False):
-    """Reject truncated top-level boxes, then probe video metadata (not a full decode)."""
+def is_fragmented_mp4(path):
+    """Validate top-level boxes and detect fragmentation without demuxing."""
     length = path.stat().st_size
     found = set()
     with path.open("rb") as stream:
@@ -73,6 +73,12 @@ def inspect_mp4(path, strict_timing=False):
             stream.seek(offset)
     if not {b"ftyp", b"moov", b"mdat"}.issubset(found):
         raise Rejected(422, "missing MP4 video structures")
+    return b"moof" in found
+
+
+def inspect_mp4(path, strict_timing=False):
+    """Validate video metadata and optionally check every packet timestamp."""
+    fragmented = is_fragmented_mp4(path)
     try:
         command = ["ffprobe", "-v", "error", "-select_streams", "v:0"]
         entries = "stream=codec_name,width,height:format=duration"
@@ -85,7 +91,7 @@ def inspect_mp4(path, strict_timing=False):
         video = info["streams"][0]
         if video["codec_name"] not in ("h264", "hevc") or video["width"] <= 0 or video["height"] <= 0:
             raise ValueError("unsupported video")
-        info["fragmented"] = b"moof" in found
+        info["fragmented"] = fragmented
         if strict_timing:
             packets = info.pop("packets", [])
             if not packets or any("pts" not in p or "dts" not in p for p in packets):
@@ -107,8 +113,7 @@ def inspect_mp4(path, strict_timing=False):
 
 
 def finalize_mp4(path):
-    info = inspect_mp4(path)
-    if not info["fragmented"]:
+    if not is_fragmented_mp4(path):
         return inspect_mp4(path, strict_timing=True)
     # Older FFmpeg demuxers misread implicit offsets across multiple trun boxes
     # emitted by GStreamer 1.20. qtdemux reads these fragments correctly. Remux
@@ -118,6 +123,8 @@ def finalize_mp4(path):
     # Re-parsing H.264/H.265 here is unnecessary and can clear PTS on affected
     # streams. Link the video pad directly; never synthesize PTS or drop buffers.
     try:
+        # Missing sample sizes can make FFprobe reject the fragment header.
+        # Repair the fragment defaults before any media probe.
         repairs = repair_streaming_defaults(path)
         # Keep the sender's microsecond resolution; an automatic timescale can
         # merge distinct close timestamps during this otherwise lossless remux.
@@ -125,8 +132,8 @@ def finalize_mp4(path):
                         "!", "qtdemux", "name=demux", "demux.video_0", "!", "mp4mux", "faststart=true", "trak-timescale=1000000",
                         "!", "filesink", "location=" + json.dumps(str(normalized))],
                        capture_output=True, timeout=10, check=True)
+        result = inspect_mp4(normalized, strict_timing=True)
         normalized.replace(path)
-        result = inspect_mp4(path, strict_timing=True)
         result["fragment_defaults"] = repairs
         return result
     except FragmentError as exc:

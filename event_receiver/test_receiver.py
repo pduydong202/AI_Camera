@@ -3,6 +3,7 @@ import http.client
 import json
 from pathlib import Path
 import socket
+import struct
 import tempfile
 import threading
 import time
@@ -107,15 +108,42 @@ class ReceiverTests(unittest.TestCase):
         self.assertEqual(self.files("event.json"), [])
 
     def test_remux_failure_reports_exit_code_and_stderr(self):
-        info = {"fragmented": True, "streams": [{"codec_name": "h264"}]}
+        path = Path(self.directory.name) / "clip.mp4"
+        path.write_bytes(self.video + struct.pack(">I4s", 8, b"moof"))
         problem = subprocess.CalledProcessError(3, ["gst-launch-1.0"], stderr=b"streaming stopped, reason not-negotiated\n")
-        with mock.patch("server.inspect_mp4", return_value=info), \
-             mock.patch("server.repair_streaming_defaults", return_value={}), \
+        with mock.patch("server.repair_streaming_defaults", return_value={}), \
              mock.patch("server.subprocess.run", side_effect=problem):
             with self.assertRaises(Rejected) as caught:
-                finalize_mp4(Path(self.directory.name) / "clip.mp4")
+                finalize_mp4(path)
         self.assertIn("exit=3", caught.exception.detail)
         self.assertIn("not-negotiated", caught.exception.detail)
+
+    def test_fragment_defaults_are_repaired_before_probing(self):
+        path = Path(self.directory.name) / "clip.mp4"
+        fragmented = self.video + struct.pack(">I4s", 8, b"moof")
+        path.write_bytes(fragmented)
+        normalized = path.with_name("normalized.mp4")
+        stats = {"fragments_fixed": 1, "duration_defaults_restored": 1, "size_defaults_restored": 1}
+        probe = {"streams": [{"codec_name": "h264", "width": 64, "height": 48}],
+                 "packets": [{"pts": 0, "dts": 0, "pts_time": "0.000000"}]}
+
+        def run_media_tool(command, **kwargs):
+            repair.assert_called_once_with(path)
+            if command[0] == "gst-launch-1.0":
+                normalized.write_bytes(self.video)
+                return subprocess.CompletedProcess(command, 0, b"", b"")
+            self.assertEqual(command[0], "ffprobe")
+            self.assertEqual(Path(command[-1]), normalized)
+            self.assertEqual(path.read_bytes(), fragmented)
+            return subprocess.CompletedProcess(command, 0, json.dumps(probe).encode(), b"")
+
+        with mock.patch("server.repair_streaming_defaults", return_value=stats) as repair, \
+             mock.patch("server.subprocess.run", side_effect=run_media_tool):
+            result = finalize_mp4(path)
+        self.assertEqual(result["fragment_defaults"], stats)
+        self.assertEqual(result["timing"]["packets"], 1)
+        self.assertEqual(path.read_bytes(), self.video)
+        self.assertFalse(normalized.exists())
 
     def test_failed_samples_are_opt_in_bounded_and_not_ready(self):
         self.server.keep_failed_count = 2
